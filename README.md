@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" width="180" alt="Theatrum logo — a memory palace with a glowing memory inside">
+</p>
+
 # Theatrum
 
 > **One memory palace. Every agent.**
