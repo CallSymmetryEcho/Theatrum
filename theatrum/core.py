@@ -152,15 +152,20 @@ def dump_frontmatter(meta: dict[str, Any], body: str) -> str:
 # ---------------------------------------------------------------------------
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
+_UNICODE_SLUG_RE = re.compile(r"[^\w]+", re.UNICODE)
 
 
 def _slug(text: str, max_len: int = 40) -> str:
-    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
-    text = text.lower().strip()
-    text = _SLUG_RE.sub("-", text).strip("-")
-    if not text:
-        text = uuid.uuid4().hex[:8]
-    return text[:max_len].rstrip("-") or uuid.uuid4().hex[:8]
+    ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    ascii_text = ascii_text.lower().strip()
+    ascii_text = _SLUG_RE.sub("-", ascii_text).strip("-")
+    if ascii_text:
+        return ascii_text[:max_len].rstrip("-") or uuid.uuid4().hex[:8]
+    # Fallback for non-ASCII titles (e.g. CJK): unicode-aware pass on the original.
+    uni = _UNICODE_SLUG_RE.sub("-", text.lower()).strip("-")
+    if uni:
+        return uni[:max_len].rstrip("-") or uuid.uuid4().hex[:8]
+    return uuid.uuid4().hex[:8]
 
 
 def make_id(title_hint: str, when: date | None = None) -> str:
@@ -559,8 +564,13 @@ def remember(
         raise ValueError(f"invalid source: {source}")
     if confidence not in VALID_CONFIDENCE:
         raise ValueError(f"invalid confidence: {confidence}")
-    if scope == "project" and not project:
-        raise ValueError("project scope requires --project")
+    if scope == "project":
+        if not project:
+            raise ValueError("project scope requires --project")
+        # Validate up front, even for inbox-bound (proposed) memories:
+        # _memory_dir skips project validation when status == "proposed",
+        # and a hostile project id must never be planted in the vault.
+        _validate_project_id(project)
 
     status = "proposed" if source == "agent_inferred" else "active"
     hint = title_hint or _first_line(content) or type
@@ -621,6 +631,57 @@ def apply_feedback(ids: Sequence[str], outcome: str) -> list[Memory]:
     if updated:
         write_map()
     return updated
+
+
+# ---------------------------------------------------------------------------
+# Curation: approve (inbox → active) and forget (delete)
+# ---------------------------------------------------------------------------
+
+def approve(ids: Sequence[str]) -> list[Memory]:
+    """Promote proposed (inbox) memories to active. Moves the file out of inbox/."""
+    from . import index as _index
+
+    approved: list[Memory] = []
+    for mem_id in ids:
+        mem = find_memory(mem_id)
+        if mem is None or mem.status != "proposed":
+            continue
+        old_path = mem.path
+        mem.status = "active"
+        try:
+            write_memory(mem)  # routes by status → scope dir; updates mem.path
+        except ValueError:
+            # Hand-edited/hostile frontmatter (e.g. bad project id) must not
+            # crash the batch — skip this one, keep approving the rest.
+            mem.status = "proposed"
+            continue
+        if old_path is not None and old_path != mem.path:
+            old_path.unlink(missing_ok=True)
+        _index.ensure_index()
+        _index.index_upsert(mem)
+        approved.append(mem)
+    if approved:
+        write_map()
+    return approved
+
+
+def forget(ids: Sequence[str]) -> list[str]:
+    """Delete memories permanently: file + index row. Git is the recovery path."""
+    from . import index as _index
+
+    removed: list[str] = []
+    for mem_id in ids:
+        mem = find_memory(mem_id)
+        if mem is None:
+            continue
+        if mem.path is not None:
+            mem.path.unlink(missing_ok=True)
+        _index.ensure_index()
+        _index.index_delete(mem.id)
+        removed.append(mem.id)
+    if removed:
+        write_map()
+    return removed
 
 
 # ---------------------------------------------------------------------------

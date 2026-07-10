@@ -105,6 +105,38 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 0 if report.get("index_ok") and report.get("vault_exists") else 1
 
 
+def cmd_review(args: argparse.Namespace) -> int:
+    proposed = [m for m in core.iter_all_memories() if m.status == "proposed"]
+    if not proposed:
+        _print("inbox is empty")
+        return 0
+    for m in proposed:
+        _print(f"{m.id}\t{m.type}\t{m.scope}\t{m.project or '-'}\t{m.created}\t{m.title()}")
+    return 0
+
+
+def cmd_approve(args: argparse.Namespace) -> int:
+    approved = core.approve(args.ids)
+    approved_ids = {m.id for m in approved}
+    for m in approved:
+        _print(f"approved {m.id} → {m.path}")
+    for mem_id in args.ids:
+        if mem_id not in approved_ids:
+            _print(f"skipped {mem_id} (not found or not proposed)")
+    return 0 if approved_ids == set(args.ids) else 1
+
+
+def cmd_forget(args: argparse.Namespace) -> int:
+    removed = core.forget(args.ids)
+    removed_ids = set(removed)
+    for mem_id in removed:
+        _print(f"forgot {mem_id}")
+    for mem_id in args.ids:
+        if mem_id not in removed_ids:
+            _print(f"skipped {mem_id} (not found)")
+    return 0 if removed_ids == set(args.ids) else 1
+
+
 def _split_csv(value: str | None) -> list[str]:
     if not value:
         return []
@@ -159,13 +191,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("doctor", help="health report").set_defaults(func=cmd_doctor)
 
+    sub.add_parser("review", help="list proposed (inbox) memories").set_defaults(func=cmd_review)
+
+    ap = sub.add_parser("approve", help="promote proposed memories to active")
+    ap.add_argument("ids", nargs="+", help="memory ids to approve")
+    ap.set_defaults(func=cmd_approve)
+
+    fg = sub.add_parser("forget", help="delete memories permanently (git is recovery)")
+    fg.add_argument("ids", nargs="+", help="memory ids to forget")
+    fg.set_defaults(func=cmd_forget)
+
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return int(args.func(args) or 0)
+    try:
+        return int(args.func(args) or 0)
+    except ValueError as exc:
+        if args.cmd == "serve":
+            raise  # never mask server-side errors behind a clean CLI message
+        _print(f"error: {exc}")
+        return 2
 
 
 if __name__ == "__main__":

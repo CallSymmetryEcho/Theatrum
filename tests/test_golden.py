@@ -543,3 +543,152 @@ def test_t6_explicit_title_roundtrip():
     )
     reloaded2 = core.read_memory(untitled.path)
     assert reloaded2.title() == "Problem", reloaded2.title()
+
+
+# ---------------------------------------------------------------------------
+# S2: inbox flow — proposed → approve → active, index reflects promotion
+# ---------------------------------------------------------------------------
+
+def test_s2_inbox_flow():
+    core, idx = _mods()
+    core.init_vault()
+
+    mem = core.remember(
+        content="# proposed s2 lesson\nagent inferred s2 curation slice detail.",
+        type="lesson",
+        scope="global",
+        source="agent_inferred",
+    )
+    assert mem.status == "proposed"
+    # Compare against vault structure, not substrings — the pytest tmp dir name
+    # ("test_s2_inbox_flow0") itself contains "inbox".
+    assert mem.path.parent == core.inbox_dir()
+
+    hits = idx.recall("s2 curation slice detail")
+    assert mem.id not in [h.memory.id for h in hits], \
+        "proposed memory must not appear in recall before approval"
+
+    old_path = mem.path
+    approved = core.approve([mem.id])
+    assert len(approved) == 1
+    promoted = approved[0]
+    assert promoted.status == "active"
+    assert promoted.path is not None and promoted.path.exists()
+    assert promoted.path.parent == core.global_dir()
+    assert not old_path.exists(), "old inbox file should be gone after approval"
+
+    hits = idx.recall("s2 curation slice detail")
+    assert promoted.id in [h.memory.id for h in hits], \
+        "approved memory must be recallable"
+
+
+# ---------------------------------------------------------------------------
+# S2: forget — file + index gone, find_memory returns None
+# ---------------------------------------------------------------------------
+
+def test_s2_forget():
+    core, idx = _mods()
+    core.init_vault()
+
+    mem = core.remember(
+        content="# forgettable\nforget me s2 unique keyword body.",
+        type="lesson",
+        scope="global",
+        source="user_requested",
+    )
+    assert mem.path.exists()
+
+    removed = core.forget([mem.id])
+    assert removed == [mem.id]
+    assert not mem.path.exists()
+    assert core.find_memory(mem.id) is None
+
+    hits = idx.recall("forget me s2 unique keyword")
+    assert mem.id not in [h.memory.id for h in hits]
+
+
+# ---------------------------------------------------------------------------
+# S2: CJK slug — chinese titles round-trip through make_id, ascii still slugs
+# ---------------------------------------------------------------------------
+
+def test_s2_cjk_slug():
+    core, _idx = _mods()
+
+    cjk = core.make_id("中文标题测试")
+    # Expect "YYYYMMDD-中文标题测试"
+    _, _, tail = cjk.partition("-")
+    assert "中文标题测试" in tail, f"CJK title lost in slug: {cjk!r}"
+
+    ascii_id = core.make_id("hello world")
+    assert ascii_id.endswith("hello-world"), ascii_id
+
+
+# ---------------------------------------------------------------------------
+# S2: CLI reports ValueError cleanly instead of a raw traceback
+# ---------------------------------------------------------------------------
+
+def test_s2_cli_error_clean():
+    from theatrum import cli
+
+    core, _idx = _mods()
+    core.init_vault()
+
+    rc = cli.main([
+        "remember",
+        "x",
+        "--type", "lesson",
+        "--scope", "project",
+        "--project", "../evil",
+    ])
+    assert rc == 2
+
+
+# ---------------------------------------------------------------------------
+# S2: poison inbox — hostile project ids are rejected at remember() even for
+# inbox-bound memories, and approve() survives a hand-planted poisoned file.
+# ---------------------------------------------------------------------------
+
+def test_s2_poison_inbox_rejected_and_approve_survives():
+    core, _idx = _mods()
+    core.init_vault()
+
+    # (a) Agents cannot plant a hostile project id via remember, even though
+    # the proposed file itself would land in inbox/ (not projects/).
+    with pytest.raises(ValueError):
+        core.remember(
+            content="# poison\nattempt.",
+            type="lesson",
+            scope="project",
+            project="../evil",
+            source="agent_inferred",
+        )
+
+    # (b) A hand-edited poisoned inbox file must not crash the approve batch.
+    good = core.remember(
+        content="# good proposed\ncurate me.",
+        type="lesson",
+        scope="global",
+        source="agent_inferred",
+    )
+    poison_path = core.inbox_dir() / "20260101-poison.md"
+    poison_path.write_text(
+        "---\n"
+        "id: 20260101-poison\n"
+        "type: lesson\n"
+        "scope: project\n"
+        "project: ../evil\n"
+        "created: '2026-01-01'\n"
+        "source: agent_inferred\n"
+        "status: proposed\n"
+        "confidence: medium\n"
+        "---\n\npoisoned body.\n",
+        encoding="utf-8",
+    )
+
+    approved = core.approve(["20260101-poison", good.id])
+    approved_ids = [m.id for m in approved]
+    assert good.id in approved_ids, "good memory must survive a poisoned batch"
+    assert "20260101-poison" not in approved_ids
+    assert poison_path.exists(), "poisoned file stays in inbox for human review"
+    evil = core.vault_dir().parent / "evil"
+    assert not evil.exists(), "no directory may be created outside the vault"
