@@ -9,6 +9,8 @@ Today, Codex, Claude Code, and other agents remember in separate silos. Theatrum
 ## The idea
 
 - **Plain text is the source of truth.** Memories remain readable, editable, diffable Markdown.
+- **Memories are distilled experience, not notes.** Each unit captures the problem, what was tried, what worked, and the takeaway — the vault grows into a second brain.
+- **Retrieval is the product.** `memory_context` returns a map plus the most relevant experience under the caller's token budget.
 - **The user owns the palace.** The default store lives locally and can be opened directly as an Obsidian vault.
 - **Agents share without collapsing scopes.** Global, project, agent, and handoff memory stay explicit.
 - **Git is the audit trail.** History, review, rollback, and optional sync use familiar tools.
