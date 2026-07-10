@@ -14,6 +14,8 @@ Everything in this plan serves one call:
 
 The vault, capture, MCP plumbing, and connectors are supply lines for that call. If `memory_context` is not obviously useful, Theatrum degrades into a note pile nobody reads.
 
+**Landscape note (2026-07):** existing agent-memory systems are either heavy (mem0, Letta, Zep/Graphiti, cognee — LLM extraction pipelines, vector stores, managed backends) or Markdown-adjacent but embedding-dependent (basic-memory). The combination Theatrum targets — no LLM extraction, no embeddings, Markdown as the canonical record, MCP-shared across agents — is currently an open gap.
+
 ## 1. Golden scenarios
 
 V1 exists to make four flows dependable:
@@ -55,6 +57,7 @@ source: claude-code            # user_requested | agent_inferred
 status: active                 # active | proposed | superseded
 confidence: high
 derived_from: []
+superseded_by: null            # corrections point forward instead of rewriting the past
 used: 0
 dead_end: 0
 ---
@@ -101,9 +104,22 @@ Theatrum never runs an LLM itself. The intelligence stays on the agent side; The
 **Ranking (V1, no embeddings):**
 
 1. Hard filters: scope, project, `status: active`.
-2. Text relevance: SQLite FTS5 BM25 (stdlib, index disposable and rebuildable).
-3. Boosts: recency decay, confidence, usage feedback (`useful` up, `dead_end` down).
-4. Dedupe, then cut deterministically at the caller's token budget (chars/4 estimate).
+2. Score — multiplicative boosts over BM25 (additive mixing of raw BM25 is unstable because FTS5 scores are not comparable across queries):
+
+   ```text
+   score = relevance × recency × confidence_boost × scope_boost × feedback_boost
+
+   relevance        = -bm25(fts)                     # FTS5 returns negative; lower = better
+   recency          = 0.5 + 0.5·exp(-0.1·age_days)   # floored at 0.5 — old memories never die
+   confidence_boost = 1.0 + 0.3·confidence           # confidence ∈ [0, 1]
+   scope_boost      = 1.2 if project match else 1.0
+   feedback_boost   = max(0.8, 1 + 0.4·ln(1+useful) − 0.2·ln(1+dead_end))
+                     # log-smoothed and floored: new memories start neutral (no Matthew effect)
+   ```
+
+3. Dedupe, then cut deterministically at the caller's token budget (chars/4 estimate).
+
+Text relevance stays the dominant signal: every boost has a floor, so metadata tunes the order but can never bury a strong BM25 match. All parameters above are starting points, expected to be tuned against real vault data.
 
 The feedback loop is borrowed from graphify's `save-result --outcome`: retrieval quality compounds with use, which is what makes the vault a second brain instead of an archive.
 
