@@ -27,6 +27,7 @@ def memory_remember(
     source: str = "user_requested",
     derived_from: list[str] | None = None,
     confidence: str = "medium",
+    title: str | None = None,
 ) -> dict[str, Any]:
     """
     Save a memory.
@@ -49,6 +50,7 @@ def memory_remember(
             source=source,
             derived_from=list(derived_from or []),
             confidence=confidence,
+            title_hint=title,
         )
     except ValueError as exc:
         return {"error": str(exc)}

@@ -514,3 +514,32 @@ def test_t5_id_collision_both_files_exist():
     assert a.id != b.id, f"Both memories got the same id: {a.id!r}"
     assert a.path is not None and a.path.exists(), f"File for memory A not found: {a.path}"
     assert b.path is not None and b.path.exists(), f"File for memory B not found: {b.path}"
+
+
+# ---------------------------------------------------------------------------
+# T6: explicit title persists in frontmatter and survives a reload;
+#     without it, title() falls back to the first heading.
+# ---------------------------------------------------------------------------
+
+def test_t6_explicit_title_roundtrip():
+    core, _idx = _mods()
+    core.init_vault()
+
+    titled = core.remember(
+        content="## Problem\ntemplate body starts with a section header.",
+        type="lesson",
+        scope="global",
+        source="user_requested",
+        title_hint="my real title",
+    )
+    reloaded = core.read_memory(titled.path)
+    assert reloaded.title() == "my real title", reloaded.title()
+
+    untitled = core.remember(
+        content="## Problem\nno explicit title given.",
+        type="lesson",
+        scope="global",
+        source="user_requested",
+    )
+    reloaded2 = core.read_memory(untitled.path)
+    assert reloaded2.title() == "Problem", reloaded2.title()

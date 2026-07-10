@@ -358,10 +358,13 @@ class Memory:
     superseded_by: str | None = None
     used: int = 0
     dead_end: int = 0
+    title_hint: str | None = None   # explicit title from frontmatter, if any
     body: str = ""
     path: Path | None = None
 
     def title(self) -> str:
+        if self.title_hint:
+            return self.title_hint
         for line in self.body.splitlines():
             s = line.strip()
             if s.startswith("#"):
@@ -373,6 +376,7 @@ class Memory:
     def to_meta(self) -> dict[str, Any]:
         return {
             "id": self.id,
+            "title": self.title_hint,
             "type": self.type,
             "scope": self.scope,
             "project": self.project,
@@ -485,6 +489,7 @@ def read_memory(path: Path) -> Memory | None:
         superseded_by=(str(meta["superseded_by"]) if meta.get("superseded_by") else None),
         used=int(meta.get("used", 0) or 0),
         dead_end=int(meta.get("dead_end", 0) or 0),
+        title_hint=(str(meta["title"]) if meta.get("title") else None),
         body=body,
         path=path,
     )
@@ -578,6 +583,7 @@ def remember(
         superseded_by=None,
         used=0,
         dead_end=0,
+        title_hint=title_hint,  # only explicit titles are persisted
         body=content if content.endswith("\n") else content + "\n",
     )
     write_memory(mem)
