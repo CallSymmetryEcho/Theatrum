@@ -7,8 +7,8 @@ Rules:
 - ``disconnect`` fully reverses ``connect``.
 - Claude Code: prefer ``claude mcp add --scope user theatrum -- theatrum serve``
   when the ``claude`` binary is on PATH; else print manual instructions.
-- Codex: edit ``~/.codex/config.toml`` [mcp_servers.theatrum] with
-  ``command="theatrum"`` / ``args=["serve"]``. Create the file if absent.
+- Codex: edit ``~/.codex/config.toml`` [mcp_servers.theatrum] with the resolved
+  theatrum command / ``args=["serve"]``. Create the file if absent.
 """
 
 from __future__ import annotations
@@ -17,10 +17,20 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 from . import core
+
+
+def _theatrum_command() -> str:
+    """
+    Absolute command hosts should spawn. PATH shim when installed (pipx/uv tool);
+    otherwise the currently-running entry point (dev .venv) — hosts don't
+    inherit our virtualenv, so a bare "theatrum" would fail to launch.
+    """
+    return shutil.which("theatrum") or str(Path(sys.argv[0]).resolve())
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +68,7 @@ def _connect_claude() -> str:
         backup = _backup(settings) if settings else None
         try:
             proc = subprocess.run(
-                [binary, "mcp", "add", "--scope", "user", "theatrum", "--", "theatrum", "serve"],
+                [binary, "mcp", "add", "--scope", "user", "theatrum", "--", _theatrum_command(), "serve"],
                 capture_output=True, text=True, timeout=15,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
@@ -132,11 +142,11 @@ def _claude_manual_instructions() -> str:
 
 _CODEX_CONFIG = Path.home() / ".codex" / "config.toml"
 
-CODEX_BLOCK = (
+CODEX_BLOCK_TEMPLATE = (
     "\n"
     "# theatrum: begin (do not edit manually — managed by `theatrum connect codex`)\n"
     '[mcp_servers.theatrum]\n'
-    'command = "theatrum"\n'
+    'command = "{cmd}"\n'
     'args = ["serve"]\n'
     "# theatrum: end\n"
 )
@@ -156,7 +166,7 @@ def _connect_codex() -> str:
     stripped = _CODEX_BLOCK_RE.sub("\n", existing).rstrip() + "\n"
     if stripped.strip() == "":
         stripped = ""
-    new = stripped + CODEX_BLOCK
+    new = stripped + CODEX_BLOCK_TEMPLATE.format(cmd=_theatrum_command())
     core.atomic_write_text(p, new)
     msg = f"connected: codex → {p}"
     if backup:
@@ -190,6 +200,23 @@ def connect_host(host: str) -> str:
     if host == "codex":
         return _connect_codex()
     raise ValueError(f"unknown host: {host}")
+
+
+def host_status() -> dict[str, bool | None]:
+    """Read-only wiring check. claude_connected is None when the claude CLI is absent/fails."""
+    claude: bool | None = None
+    binary = _claude_binary()
+    if binary:
+        try:
+            proc = subprocess.run(
+                [binary, "mcp", "get", "theatrum"],
+                capture_output=True, text=True, timeout=10,
+            )
+            claude = proc.returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            claude = None
+    codex = _CODEX_CONFIG.exists() and "# theatrum: begin" in _CODEX_CONFIG.read_text(encoding="utf-8")
+    return {"claude_connected": claude, "codex_connected": codex}
 
 
 def disconnect_host(host: str) -> str:

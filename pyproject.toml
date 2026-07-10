@@ -18,6 +18,10 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest>=7.0"]
 
+[project.urls]
+Homepage = "https://github.com/CallSymmetryEcho/Theatrum"
+Repository = "https://github.com/CallSymmetryEcho/Theatrum.git"
+
 [project.scripts]
 theatrum = "theatrum.cli:main"
 

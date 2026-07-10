@@ -692,3 +692,191 @@ def test_s2_poison_inbox_rejected_and_approve_survives():
     assert poison_path.exists(), "poisoned file stays in inbox for human review"
     evil = core.vault_dir().parent / "evil"
     assert not evil.exists(), "no directory may be created outside the vault"
+
+
+# ---------------------------------------------------------------------------
+# S3: read-only importers → inbox/ (proposed, human-reviewed)
+# ---------------------------------------------------------------------------
+
+def _write(p: Path, text: str) -> None:
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(text, encoding="utf-8")
+
+
+def test_s3_import_claude_dry_run_and_yes(tmp_path):
+    core, idx = _mods()
+    from theatrum import importer
+    core.init_vault()
+
+    src = tmp_path / "src_claude"
+    # MEMORY.md is an index — must be skipped.
+    _write(src / "MEMORY.md", "# index of things\n- a\n- b\n")
+    _write(
+        src / "a.md",
+        "---\nname: alpha memory\ndescription: alpha description title\n---\n"
+        "# heading\nalpha body content unique keyword.\n",
+    )
+    _write(
+        src / "b.md",
+        "---\nname: beta memory\n---\n"
+        "beta body content another unique keyword.\n",
+    )
+
+    # Dry run: nothing lands in the vault.
+    dry = importer.run_import("claude", src, scope="global", project=None, type="lesson", yes=False)
+    assert len(dry["imported"]) == 2
+    assert len(dry["duplicates"]) == 0
+    assert len(dry["secrets"]) == 0
+    assert list(core.inbox_dir().glob("*.md")) == []
+
+    # Real run: writes into inbox/ as proposed.
+    real = importer.run_import("claude", src, scope="global", project=None, type="lesson", yes=True)
+    assert len(real["imported"]) == 2
+
+    inbox_files = list(core.inbox_dir().glob("*.md"))
+    assert len(inbox_files) == 2
+
+    mems = [m for m in core.iter_all_memories()]
+    assert all(m.status == "proposed" for m in mems)
+    assert all(m.source == "imported" for m in mems)
+    assert all(m.import_path for m in mems)
+    titles = {m.title_hint for m in mems}
+    assert "alpha description title" in titles  # description beats name
+    assert "beta memory" in titles              # falls back to name
+
+    # Not retrievable via recall before approve.
+    hits = idx.recall("alpha body content unique keyword")
+    assert not any(m.title_hint == "alpha description title" for m in [h.memory for h in hits])
+
+    # After approve, recall hits.
+    alpha = next(m for m in mems if m.title_hint == "alpha description title")
+    core.approve([alpha.id])
+    hits = idx.recall("alpha body content unique keyword")
+    assert alpha.id in [h.memory.id for h in hits]
+
+
+def test_s3_import_dedupe_rerun(tmp_path):
+    core, _idx = _mods()
+    from theatrum import importer
+    core.init_vault()
+
+    src = tmp_path / "src_dupes"
+    _write(src / "one.md", "shared identical body content for dedupe test.\n")
+    _write(src / "two.md", "shared identical body content for dedupe test.\n")
+    _write(src / "three.md", "distinct body content once here.\n")
+
+    # First run: in-batch dedupe — one.md and two.md have the same body.
+    first = importer.run_import("markdown", src, scope="global", project=None, type="lesson", yes=True)
+    assert len(first["imported"]) == 2
+    assert len(first["duplicates"]) == 1
+
+    # Second run: everything already in vault → all duplicates.
+    second = importer.run_import("markdown", src, scope="global", project=None, type="lesson", yes=True)
+    assert len(second["imported"]) == 0
+    assert len(second["duplicates"]) == 3
+
+
+def test_s3_import_secret_skipped(tmp_path):
+    core, _idx = _mods()
+    from theatrum import importer
+    core.init_vault()
+
+    src = tmp_path / "src_secret"
+    # Fake AWS access key pattern: AKIA + 16 upper/digits.
+    _write(src / "bad.md", "here is a leak AKIAABCDEFGHIJKLMNOP in the body.\n")
+    _write(src / "good.md", "totally clean body content over here.\n")
+
+    result = importer.run_import("markdown", src, scope="global", project=None, type="lesson", yes=True)
+    assert len(result["secrets"]) == 1
+    assert len(result["imported"]) == 1
+
+    mems = list(core.iter_all_memories())
+    assert len(mems) == 1
+    assert "AKIA" not in mems[0].body
+
+
+def test_s3_import_codex_agents_md(tmp_path):
+    core, _idx = _mods()
+    from theatrum import importer
+    core.init_vault()
+
+    src = tmp_path / "src_codex"
+    src.mkdir()
+    body = "# Codex Rules Title\n\nDo the thing. Avoid the other thing.\n"
+    _write(src / "AGENTS.md", body)
+
+    result = importer.run_import("codex", src, scope="global", project=None, type="lesson", yes=True)
+    assert len(result["imported"]) == 1
+
+    mems = list(core.iter_all_memories())
+    assert len(mems) == 1
+    m = mems[0]
+    assert m.title_hint == "Codex Rules Title"
+    # Whole text preserved verbatim in the body.
+    assert "Do the thing." in m.body
+    assert "# Codex Rules Title" in m.body
+
+
+def test_s3_import_markdown_file(tmp_path):
+    core, _idx = _mods()
+    from theatrum import importer
+    core.init_vault()
+
+    f = tmp_path / "note.md"
+    _write(
+        f,
+        "---\ntitle: My Note Title\ntags: [x]\n---\n"
+        "# heading in body\nthis is the actual note body content.\n",
+    )
+
+    result = importer.run_import("markdown", f, scope="global", project=None, type="lesson", yes=True)
+    assert len(result["imported"]) == 1
+
+    mems = list(core.iter_all_memories())
+    assert len(mems) == 1
+    m = mems[0]
+    assert m.title_hint == "My Note Title"
+    # Frontmatter must not leak into the body.
+    assert "title: My Note Title" not in m.body
+    assert "heading in body" in m.body
+
+
+# ---------------------------------------------------------------------------
+# S4: doctor reports install / vault-git / host wiring keys
+# ---------------------------------------------------------------------------
+
+def test_s4_doctor_wiring_keys():
+    core, _idx = _mods()
+    import theatrum.connect as connect_mod
+    core.init_vault()
+
+    report = core.doctor()
+    assert "theatrum_on_path" in report and isinstance(report["theatrum_on_path"], bool)
+    assert "vault_git" in report and report["vault_git"] is False
+    assert "claude_connected" in report  # value may be True/False/None depending on host
+    assert "codex_connected" in report and report["codex_connected"] is False
+
+    # Wire codex under the isolated HOME → codex_connected flips True.
+    connect_mod._connect_codex()
+    report2 = core.doctor()
+    assert report2["codex_connected"] is True
+
+
+# ---------------------------------------------------------------------------
+# S4: init prints a git-init hint until the vault is a git repo
+# ---------------------------------------------------------------------------
+
+def test_s4_init_git_hint(capsys):
+    from theatrum import cli
+    core, _idx = _mods()
+
+    rc = cli.main(["init"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "git init" in out
+
+    (core.vault_dir() / ".git").mkdir(parents=True, exist_ok=True)
+    rc = cli.main(["init"])
+    assert rc == 0
+    out2 = capsys.readouterr().out
+    assert "git init" not in out2

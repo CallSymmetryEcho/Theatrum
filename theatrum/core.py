@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import unicodedata
@@ -33,7 +34,7 @@ VALID_TYPES = {
 }
 VALID_SCOPES = {"global", "project"}
 VALID_STATUSES = {"active", "proposed", "superseded"}
-VALID_SOURCES = {"user_requested", "agent_inferred"}
+VALID_SOURCES = {"user_requested", "agent_inferred", "imported"}
 VALID_CONFIDENCE = {"low", "medium", "high"}
 CONFIDENCE_TO_FLOAT = {"low": 0.0, "medium": 0.5, "high": 1.0}
 VALID_OUTCOMES = {"useful", "dead_end"}
@@ -364,6 +365,8 @@ class Memory:
     used: int = 0
     dead_end: int = 0
     title_hint: str | None = None   # explicit title from frontmatter, if any
+    import_path: str | None = None  # absolute source path for imported memories
+    import_hash: str | None = None  # sha256 of imported content, for dedupe
     body: str = ""
     path: Path | None = None
 
@@ -379,7 +382,7 @@ class Memory:
         return self.id
 
     def to_meta(self) -> dict[str, Any]:
-        return {
+        meta: dict[str, Any] = {
             "id": self.id,
             "title": self.title_hint,
             "type": self.type,
@@ -395,6 +398,11 @@ class Memory:
             "used": int(self.used),
             "dead_end": int(self.dead_end),
         }
+        if self.import_path:
+            meta["import_path"] = self.import_path
+        if self.import_hash:
+            meta["import_hash"] = self.import_hash
+        return meta
 
     def render(self) -> str:
         return dump_frontmatter(self.to_meta(), self.body)
@@ -495,6 +503,8 @@ def read_memory(path: Path) -> Memory | None:
         used=int(meta.get("used", 0) or 0),
         dead_end=int(meta.get("dead_end", 0) or 0),
         title_hint=(str(meta["title"]) if meta.get("title") else None),
+        import_path=(str(meta["import_path"]) if meta.get("import_path") else None),
+        import_hash=(str(meta["import_hash"]) if meta.get("import_hash") else None),
         body=body,
         path=path,
     )
@@ -547,12 +557,15 @@ def remember(
     derived_from: Sequence[str] = (),
     confidence: str = "medium",
     title_hint: str | None = None,
+    import_path: str | None = None,
+    import_hash: str | None = None,
 ) -> Memory:
     """
     Create and persist a memory. Returns the saved Memory (with ``.path`` set).
 
-    ``source == "agent_inferred"`` lands in inbox/ with ``status: proposed``;
-    ``user_requested`` is ``active`` immediately.
+    Only ``source == "user_requested"`` lands as ``active``; every other source
+    (``agent_inferred``, ``imported``) is ``proposed`` and routed to ``inbox/``
+    for human review.
     """
     from . import index as _index
 
@@ -572,7 +585,7 @@ def remember(
         # and a hostile project id must never be planted in the vault.
         _validate_project_id(project)
 
-    status = "proposed" if source == "agent_inferred" else "active"
+    status = "active" if source == "user_requested" else "proposed"
     hint = title_hint or _first_line(content) or type
     # Determine dest_dir up front so we can atomically claim the id there.
     dest_dir = _memory_dir(scope, project if scope == "project" else None, status)
@@ -594,6 +607,8 @@ def remember(
         used=0,
         dead_end=0,
         title_hint=title_hint,  # only explicit titles are persisted
+        import_path=import_path,
+        import_hash=import_hash,
         body=content if content.endswith("\n") else content + "\n",
     )
     write_memory(mem)
@@ -776,5 +791,12 @@ def doctor() -> dict[str, Any]:
         active_memories=active,
         proposed_memories=proposed,
         project_count=len(projects),
+        theatrum_on_path=bool(shutil.which("theatrum")),
+        vault_git=(vault_dir() / ".git").exists(),
     )
+    try:
+        from . import connect
+        report.update(connect.host_status())
+    except Exception as exc:  # noqa: BLE001 - doctor reports, never crashes
+        report["host_status_error"] = repr(exc)
     return report

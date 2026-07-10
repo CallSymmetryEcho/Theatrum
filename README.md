@@ -98,8 +98,8 @@ Vector search and knowledge graphs stay optional, derived, and *later* — added
 ### Quick start
 
 ```bash
-git clone <this repo> && cd Theatrum
-uv venv && uv pip install -e .
+pipx install "git+https://github.com/CallSymmetryEcho/Theatrum"   # or: uv tool install
+# or from source: git clone <this repo> && cd Theatrum && uv venv && uv pip install -e .
 
 theatrum init                  # vault at ~/.theatrum/vault
 theatrum connect claude        # wires the MCP server into Claude Code
@@ -118,6 +118,10 @@ theatrum context "current task description" --budget 2000
 theatrum review                # list inbox (agent-inferred, awaiting approval)
 theatrum approve <id> [...]    # promote to active — now retrievable
 theatrum forget <id> [...]     # delete permanently (git is the recovery path)
+
+# migrate existing agent memories (read-only; dry-run by default)
+theatrum import claude ./_claude_memory --scope project
+theatrum import markdown ~/notes --yes   # write into inbox for review
 ```
 
 Every host-config edit is backed up first, and `disconnect` fully reverses `connect`.
@@ -131,11 +135,11 @@ Every host-config edit is backed up first, and `disconnect` fully reverses `conn
 
 ### Status
 
-**S1 + S2 shipped**: vault + `remember`/`recall`/`context` CLI + 4 MCP tools + Claude Code / Codex connect, plus the full curation loop — `review`/`approve`/`forget`, inbox hardening against hostile project ids, feedback counters in ranking, and CJK-readable memory ids. All four golden scenarios pass as tests against an isolated `$HOME`; the MCP protocol layer is tested end-to-end over real stdio.
+**S1–S4 shipped**: vault + `remember`/`recall`/`context` CLI + 4 MCP tools + Claude Code / Codex connect, plus the full curation loop — `review`/`approve`/`forget`, inbox hardening against hostile project ids, feedback counters in ranking, and CJK-readable memory ids. All four golden scenarios pass as tests against an isolated `$HOME`; the MCP protocol layer is tested end-to-end over real stdio. Also: read-only importers (`theatrum import claude|codex|markdown`) with dry-run default, secret filtering, content-hash dedupe and per-file provenance (imported memories wait in inbox); plus install via pipx git-URL, doctor wiring checks, and docs/USAGE.md.
 
-Next: read-only importers for existing agent memories (S3), pipx distribution (S4).
+Next: S5 (embeddings / hybrid retrieval) only if FTS5 provably falls short.
 
-Read the [V1 Master Plan](docs/V1_MASTER_PLAN.md) and [Project Anchor](docs/PROJECT_ANCHOR.md) for the boundaries that guide the design.
+Read the [V1 Master Plan](docs/V1_MASTER_PLAN.md), [Project Anchor](docs/PROJECT_ANCHOR.md), and [Usage reference](docs/USAGE.md) for the boundaries that guide the design.
 
 ---
 
@@ -226,8 +230,8 @@ Theatrum 自己从不调用 LLM。智能留在 agent 一侧；Theatrum 只负责
 ### 快速开始
 
 ```bash
-git clone <this repo> && cd Theatrum
-uv venv && uv pip install -e .
+pipx install "git+https://github.com/CallSymmetryEcho/Theatrum"   # 或：uv tool install
+# 或源码安装：git clone <this repo> && cd Theatrum && uv venv && uv pip install -e .
 
 theatrum init                  # vault 建在 ~/.theatrum/vault
 theatrum connect claude        # 把 MCP 服务器接入 Claude Code
@@ -246,6 +250,10 @@ theatrum context "当前任务描述" --budget 2000
 theatrum review                # 列出 inbox（agent 推断，待审核）
 theatrum approve <id> [...]    # 晋升为 active——开始可被检索
 theatrum forget <id> [...]     # 永久删除（Git 是恢复路径）
+
+# 迁移既有 agent 记忆（只读，默认 dry-run）
+theatrum import claude ./_claude_memory --scope project
+theatrum import markdown ~/notes --yes   # 写入 inbox 待审核
 ```
 
 每次修改宿主配置前都会先备份，`disconnect` 可完全还原 `connect`。
@@ -259,8 +267,8 @@ theatrum forget <id> [...]     # 永久删除（Git 是恢复路径）
 
 ### 状态
 
-**S1 + S2 已交付**：vault + `remember`/`recall`/`context` CLI + 4 个 MCP 工具 + Claude Code / Codex 接入，外加完整审核闭环——`review`/`approve`/`forget`、inbox 抗投毒加固（恶意 project id 进不了 vault）、反馈计数进排序、中文标题生成可读 ID。四大黄金场景全部在隔离 `$HOME` 下通过测试；MCP 协议层经真实 stdio 端到端验证。
+**S1–S4 已交付**：vault + `remember`/`recall`/`context` CLI + 4 个 MCP 工具 + Claude Code / Codex 接入，外加完整审核闭环——`review`/`approve`/`forget`、inbox 抗投毒加固（恶意 project id 进不了 vault）、反馈计数进排序、中文标题生成可读 ID。四大黄金场景全部在隔离 `$HOME` 下通过测试；MCP 协议层经真实 stdio 端到端验证。此外：只读导入器（`theatrum import claude|codex|markdown`），默认 dry-run、过滤密钥、按内容哈希去重、逐文件溯源（导入的记忆先落入 inbox 待审核）；以及 pipx git-URL 安装、doctor 接线检查、docs/USAGE.md。
 
-下一步：既有 agent 记忆的只读导入器（S3）、pipx 分发（S4）。
+下一步：仅当 FTS5 被证明不够用时才进入 S5（embedding / 混合检索）。
 
-设计边界详见 [V1 Master Plan](docs/V1_MASTER_PLAN.md) 与 [Project Anchor](docs/PROJECT_ANCHOR.md)。
+设计边界详见 [V1 Master Plan](docs/V1_MASTER_PLAN.md)、[Project Anchor](docs/PROJECT_ANCHOR.md) 与 [使用参考](docs/USAGE.md)。

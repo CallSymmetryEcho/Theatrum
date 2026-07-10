@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from . import __version__, core, index as _index
 from .connect import connect_host, disconnect_host
@@ -19,6 +20,8 @@ def cmd_init(args: argparse.Namespace) -> int:
     _index.ensure_index()
     core.write_map()
     _print(f"initialized vault at {v}")
+    if not (core.vault_dir() / ".git").exists():
+        _print(f"tip: cd {v} && git init   # git is the audit trail and the recovery path")
     return 0
 
 
@@ -126,6 +129,49 @@ def cmd_approve(args: argparse.Namespace) -> int:
     return 0 if approved_ids == set(args.ids) else 1
 
 
+def cmd_import(args: argparse.Namespace) -> int:
+    from . import importer
+
+    path = Path(args.path).expanduser()
+    if not path.exists():
+        _print(f"error: path not found: {path}")
+        return 2
+
+    project = args.project
+    if args.scope == "project" and not project:
+        project = core.detect_project(path if path.is_dir() else path.parent)
+
+    result = importer.run_import(
+        args.kind, path,
+        scope=args.scope, project=project, type=args.type, yes=args.yes,
+    )
+    imported = result["imported"]
+    duplicates = result["duplicates"]
+    secrets = result["secrets"]
+
+    if args.yes:
+        for mem_id, _rel in imported:
+            _print(f"imported {mem_id} → inbox")
+    else:
+        for title, rel in imported:
+            _print(f"+ {title}  ({rel})")
+        for rel in duplicates:
+            _print(f"~ dup: {rel}")
+        for rel in secrets:
+            _print(f"! secret: {rel}")
+
+    n = len(imported)
+    m = len(duplicates)
+    k = len(secrets)
+    if args.yes:
+        _print(f"imported {n} (skipped {m} duplicate, {k} secret-flagged)")
+        _print("next: theatrum review")
+    else:
+        _print(f"would import {n} ({m} duplicate, {k} secret-flagged skipped)")
+        _print("re-run with --yes to write into inbox/ for review")
+    return 0
+
+
 def cmd_forget(args: argparse.Namespace) -> int:
     removed = core.forget(args.ids)
     removed_ids = set(removed)
@@ -200,6 +246,15 @@ def build_parser() -> argparse.ArgumentParser:
     fg = sub.add_parser("forget", help="delete memories permanently (git is recovery)")
     fg.add_argument("ids", nargs="+", help="memory ids to forget")
     fg.set_defaults(func=cmd_forget)
+
+    im = sub.add_parser("import", help="read-only import of existing agent memories into inbox/")
+    im.add_argument("kind", choices=["claude", "codex", "markdown"])
+    im.add_argument("path")
+    im.add_argument("--scope", default="global", choices=sorted(core.VALID_SCOPES))
+    im.add_argument("--project", help="project id (auto-detected from path when scope=project)")
+    im.add_argument("--type", default="lesson", choices=sorted(core.VALID_TYPES))
+    im.add_argument("--yes", action="store_true", help="actually write (default: dry-run preview)")
+    im.set_defaults(func=cmd_import)
 
     return p
 
