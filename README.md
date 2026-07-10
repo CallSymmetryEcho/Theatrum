@@ -113,6 +113,11 @@ theatrum remember "## Problem
 
 theatrum recall "that thing about ..."
 theatrum context "current task description" --budget 2000
+
+# curate what agents proposed
+theatrum review                # list inbox (agent-inferred, awaiting approval)
+theatrum approve <id> [...]    # promote to active — now retrievable
+theatrum forget <id> [...]     # delete permanently (git is the recovery path)
 ```
 
 Every host-config edit is backed up first, and `disconnect` fully reverses `connect`.
@@ -126,9 +131,9 @@ Every host-config edit is backed up first, and `disconnect` fully reverses `conn
 
 ### Status
 
-**S1 vertical slice shipped**: vault + `remember`/`recall`/`context` CLI + 4 MCP tools + Claude Code / Codex connect. Golden scenarios 1–3 pass as tests against an isolated `$HOME`; the MCP protocol layer is tested end-to-end over real stdio.
+**S1 + S2 shipped**: vault + `remember`/`recall`/`context` CLI + 4 MCP tools + Claude Code / Codex connect, plus the full curation loop — `review`/`approve`/`forget`, inbox hardening against hostile project ids, feedback counters in ranking, and CJK-readable memory ids. All four golden scenarios pass as tests against an isolated `$HOME`; the MCP protocol layer is tested end-to-end over real stdio.
 
-Next: inbox review flow (S2), read-only importers for existing agent memories (S3), pipx distribution (S4).
+Next: read-only importers for existing agent memories (S3), pipx distribution (S4).
 
 Read the [V1 Master Plan](docs/V1_MASTER_PLAN.md) and [Project Anchor](docs/PROJECT_ANCHOR.md) for the boundaries that guide the design.
 
@@ -236,6 +241,11 @@ theatrum remember "## Problem
 
 theatrum recall "那个关于……的东西"
 theatrum context "当前任务描述" --budget 2000
+
+# 审核 agent 自行推断的记忆
+theatrum review                # 列出 inbox（agent 推断，待审核）
+theatrum approve <id> [...]    # 晋升为 active——开始可被检索
+theatrum forget <id> [...]     # 永久删除（Git 是恢复路径）
 ```
 
 每次修改宿主配置前都会先备份，`disconnect` 可完全还原 `connect`。
@@ -249,8 +259,8 @@ theatrum context "当前任务描述" --budget 2000
 
 ### 状态
 
-**S1 垂直切片已交付**：vault + `remember`/`recall`/`context` CLI + 4 个 MCP 工具 + Claude Code / Codex 接入。黄金场景 1–3 已在隔离 `$HOME` 下通过测试；MCP 协议层经真实 stdio 端到端验证。
+**S1 + S2 已交付**：vault + `remember`/`recall`/`context` CLI + 4 个 MCP 工具 + Claude Code / Codex 接入，外加完整审核闭环——`review`/`approve`/`forget`、inbox 抗投毒加固（恶意 project id 进不了 vault）、反馈计数进排序、中文标题生成可读 ID。四大黄金场景全部在隔离 `$HOME` 下通过测试；MCP 协议层经真实 stdio 端到端验证。
 
-下一步：inbox 审核流（S2）、既有 agent 记忆的只读导入器（S3）、pipx 分发（S4）。
+下一步：既有 agent 记忆的只读导入器（S3）、pipx 分发（S4）。
 
 设计边界详见 [V1 Master Plan](docs/V1_MASTER_PLAN.md) 与 [Project Anchor](docs/PROJECT_ANCHOR.md)。
