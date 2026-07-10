@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "theatrum-memory"
+version = "0.1.0"
+description = "Local-first memory control plane for AI agents"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Theatrum" }]
+dependencies = [
+    "mcp>=1.0.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+
+[project.scripts]
+theatrum = "theatrum.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["theatrum"]
