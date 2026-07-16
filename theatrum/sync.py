@@ -195,9 +195,23 @@ def _configured_target(
     return resolved_remote, resolved_branch
 
 
+def _nul_paths(proc: subprocess.CompletedProcess[str]) -> list[str]:
+    """Decode Git's ``-z`` path output without quotePath escaping.
+
+    Newline-delimited porcelain output quotes non-ASCII and unusual filenames,
+    which makes validation operate on Git's display form instead of the real
+    path. NUL-delimited output is unquoted and unambiguous.
+    """
+    return [path for path in proc.stdout.split("\0") if path]
+
+
 def _conflicted_paths() -> list[str]:
-    proc = _git(["diff", "--name-only", "--diff-filter=U"], check=False, timeout=10)
-    return [line for line in proc.stdout.splitlines() if line.strip()]
+    proc = _git(
+        ["diff", "--name-only", "--diff-filter=U", "-z"],
+        check=False,
+        timeout=10,
+    )
+    return _nul_paths(proc)
 
 
 def _operation_in_progress() -> str | None:
@@ -242,8 +256,8 @@ def _is_canonical_relpath(value: str) -> bool:
 
 
 def _tracked_paths() -> list[str]:
-    proc = _git(["ls-files"], check=False, timeout=10)
-    return [line for line in proc.stdout.splitlines() if line]
+    proc = _git(["ls-files", "-z"], check=False, timeout=10)
+    return _nul_paths(proc)
 
 
 def _invalid_tracked_paths() -> list[str]:
@@ -289,20 +303,20 @@ def _stage_and_commit(message: str | None) -> bool:
         _git(["add", "--", *current[start:start + 100]])
 
     deleted_proc = _git(
-        ["ls-files", "--deleted", "--", "global", "projects", "inbox"],
+        ["ls-files", "--deleted", "-z", "--", "global", "projects", "inbox"],
         check=False,
         timeout=10,
     )
     deleted = [
-        path for path in deleted_proc.stdout.splitlines()
+        path for path in _nul_paths(deleted_proc)
         if _is_canonical_relpath(path)
     ]
     for start in range(0, len(deleted), 100):
         _git(["add", "-u", "--", *deleted[start:start + 100]])
 
-    staged_proc = _git(["diff", "--cached", "--name-only"], timeout=10)
+    staged_proc = _git(["diff", "--cached", "--name-only", "-z"], timeout=10)
     invalid_staged = [
-        path for path in staged_proc.stdout.splitlines()
+        path for path in _nul_paths(staged_proc)
         if path not in {".gitignore", "MAP.md"} and not _is_canonical_relpath(path)
     ]
     if invalid_staged:

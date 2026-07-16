@@ -39,6 +39,7 @@ def test_two_existing_vaults_merge_and_rebuild_index(tmp_path, monkeypatch):
         type="lesson",
         scope="global",
         source="user_requested",
+        title_hint="不要根据文件名判断备份语义",
     )
     sync.initialize(str(remote))
     _configure_identity(core.vault_dir())
