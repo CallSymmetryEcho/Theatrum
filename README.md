@@ -130,6 +130,11 @@ theatrum forget <id> [...]     # delete permanently (git is the recovery path)
 # migrate existing agent memories (read-only; dry-run by default)
 theatrum import claude ./_claude_memory --scope project
 theatrum import markdown ~/notes --yes   # write into inbox for review
+
+# optional cross-host sync through a private Git remote
+theatrum sync init git@my-host:/srv/theatrum-vault.git
+theatrum sync run              # commit + pull + push + rebuild local index
+theatrum sync status           # offline diagnostic; never fetches
 ```
 
 Every host-config edit is backed up first, and `disconnect` fully reverses `connect`.
@@ -139,11 +144,11 @@ Every host-config edit is backed up first, and `disconnect` fully reverses `conn
 - **Markdown is canonical; every index is disposable.** Delete `index.db` — it rebuilds from the vault.
 - **Scope isolation is a hard filter, not a ranking boost.**
 - **Explicit capture.** User-requested memories go live; agent-inferred ones wait in `inbox/` for your review.
-- **Git is the audit trail.** History, review, rollback with tools you already know.
+- **Git is the audit trail and opt-in sync transport.** Only canonical memory Markdown is synchronized; generated indexes and maps stay local.
 
 ### Status
 
-**S1–S4 shipped**: vault + `remember`/`recall`/`context` CLI + 4 MCP tools + Claude Code / Codex connect, plus the full curation loop — `review`/`approve`/`forget`, inbox hardening against hostile project ids, feedback counters in ranking, and CJK-readable memory ids. All four golden scenarios pass as tests against an isolated `$HOME`; the MCP protocol layer is tested end-to-end over real stdio. Also: read-only importers (`theatrum import claude|codex|markdown`) with dry-run default, secret filtering, content-hash dedupe and per-file provenance (imported memories wait in inbox); plus install via pipx git-URL, doctor wiring checks, and docs/USAGE.md.
+**S1–S4 shipped**: vault + `remember`/`recall`/`context` CLI + 4 MCP tools + Claude Code / Codex connect, plus the full curation loop — `review`/`approve`/`forget`, inbox hardening against hostile project ids, feedback counters in ranking, and CJK-readable memory ids. All four golden scenarios pass as tests against an isolated `$HOME`; the MCP protocol layer is tested end-to-end over real stdio. Also: read-only importers (`theatrum import claude|codex|markdown`) with dry-run default, secret filtering, content-hash dedupe and per-file provenance (imported memories wait in inbox); opt-in Git sync with existing-vault union, conflict stops, secret checks, and automatic index rebuilds; plus install via pipx git-URL, doctor wiring checks, and docs/USAGE.md.
 
 Next: S5 (embeddings / hybrid retrieval) only if FTS5 provably falls short.
 
@@ -270,6 +275,11 @@ theatrum forget <id> [...]     # 永久删除（Git 是恢复路径）
 # 迁移既有 agent 记忆（只读，默认 dry-run）
 theatrum import claude ./_claude_memory --scope project
 theatrum import markdown ~/notes --yes   # 写入 inbox 待审核
+
+# 可选：通过私有 Git 远端在多台机器间同步
+theatrum sync init git@my-host:/srv/theatrum-vault.git
+theatrum sync run              # 提交 + 拉取 + 推送 + 重建本地索引
+theatrum sync status           # 仅本地诊断，不访问网络
 ```
 
 每次修改宿主配置前都会先备份，`disconnect` 可完全还原 `connect`。
@@ -279,11 +289,11 @@ theatrum import markdown ~/notes --yes   # 写入 inbox 待审核
 - **Markdown 是唯一事实；所有索引皆可抛弃。** 删掉 `index.db`，它会从 vault 自动重建。
 - **作用域隔离是硬过滤器，不是排序加权。**
 - **显式采集。** 用户要求的记忆立即生效；agent 自行推断的进 `inbox/` 等你审核。
-- **Git 就是审计日志。** 用你已经熟悉的工具查看历史、审核、回滚。
+- **Git 是审计日志，也是可选同步通道。** 只同步事实源 Markdown；生成型索引和地图留在各台机器本地。
 
 ### 状态
 
-**S1–S4 已交付**：vault + `remember`/`recall`/`context` CLI + 4 个 MCP 工具 + Claude Code / Codex 接入，外加完整审核闭环——`review`/`approve`/`forget`、inbox 抗投毒加固（恶意 project id 进不了 vault）、反馈计数进排序、中文标题生成可读 ID。四大黄金场景全部在隔离 `$HOME` 下通过测试；MCP 协议层经真实 stdio 端到端验证。此外：只读导入器（`theatrum import claude|codex|markdown`），默认 dry-run、过滤密钥、按内容哈希去重、逐文件溯源（导入的记忆先落入 inbox 待审核）；以及 pipx git-URL 安装、doctor 接线检查、docs/USAGE.md。
+**S1–S4 已交付**：vault + `remember`/`recall`/`context` CLI + 4 个 MCP 工具 + Claude Code / Codex 接入，外加完整审核闭环——`review`/`approve`/`forget`、inbox 抗投毒加固（恶意 project id 进不了 vault）、反馈计数进排序、中文标题生成可读 ID。四大黄金场景全部在隔离 `$HOME` 下通过测试；MCP 协议层经真实 stdio 端到端验证。此外：只读导入器（`theatrum import claude|codex|markdown`），默认 dry-run、过滤密钥、按内容哈希去重、逐文件溯源（导入的记忆先落入 inbox 待审核）；可选 Git 同步支持既有 vault 并集合并、冲突暂停、密钥检查和自动重建索引；以及 pipx git-URL 安装、doctor 接线检查、docs/USAGE.md。
 
 下一步：仅当 FTS5 被证明不够用时才进入 S5（embedding / 混合检索）。
 

@@ -172,6 +172,46 @@ def cmd_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sync_init(args: argparse.Namespace) -> int:
+    from . import sync as sync_mod
+
+    report = sync_mod.initialize(
+        args.url,
+        remote=args.remote,
+        branch=args.branch,
+    )
+    _print(json.dumps(report, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_sync_status(args: argparse.Namespace) -> int:
+    from . import sync as sync_mod
+
+    _print(json.dumps(sync_mod.sync_status(), indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_sync_run(args: argparse.Namespace) -> int:
+    from . import sync as sync_mod
+
+    result = sync_mod.run_sync(
+        remote=args.remote,
+        branch=args.branch,
+        message=args.message,
+        no_push=args.no_push,
+        allow_secrets=args.allow_secrets,
+    )
+    _print(json.dumps({
+        "remote": result.remote,
+        "branch": result.branch,
+        "committed": result.committed,
+        "pulled": result.pulled,
+        "pushed": result.pushed,
+        "rebuilt": result.rebuilt,
+    }, indent=2, sort_keys=True))
+    return 0
+
+
 def cmd_forget(args: argparse.Namespace) -> int:
     removed = core.forget(args.ids)
     removed_ids = set(removed)
@@ -255,6 +295,30 @@ def build_parser() -> argparse.ArgumentParser:
     im.add_argument("--type", default="lesson", choices=sorted(core.VALID_TYPES))
     im.add_argument("--yes", action="store_true", help="actually write (default: dry-run preview)")
     im.set_defaults(func=cmd_import)
+
+    sy = sub.add_parser("sync", help="synchronize the canonical Markdown vault with Git")
+    sy_sub = sy.add_subparsers(dest="sync_cmd", required=True)
+
+    sy_init = sy_sub.add_parser("init", help="initialize and configure vault Git sync")
+    sy_init.add_argument("url", nargs="?", help="Git remote URL (optional if remote already exists)")
+    sy_init.add_argument("--remote", default="origin", help="Git remote name (default: origin)")
+    sy_init.add_argument("--branch", default="main", help="remote branch (default: main)")
+    sy_init.set_defaults(func=cmd_sync_init)
+
+    sy_status = sy_sub.add_parser("status", help="show local sync state without network access")
+    sy_status.set_defaults(func=cmd_sync_status)
+
+    sy_run = sy_sub.add_parser("run", help="commit, pull, push, and rebuild local derived data")
+    sy_run.add_argument("--remote", help="override the configured Git remote")
+    sy_run.add_argument("--branch", help="override the configured remote branch")
+    sy_run.add_argument("--message", help="commit message for local vault changes")
+    sy_run.add_argument("--no-push", action="store_true", help="integrate remote changes without pushing")
+    sy_run.add_argument(
+        "--allow-secrets",
+        action="store_true",
+        help="bypass the conservative secret scanner (not recommended)",
+    )
+    sy_run.set_defaults(func=cmd_sync_run)
 
     return p
 

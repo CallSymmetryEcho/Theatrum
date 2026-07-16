@@ -160,7 +160,7 @@ Free by construction: the vault is plain Markdown, `MAP.md` is the dashboard, ba
 - Exclude credentials, tokens, `.env`, and known secret paths from import and capture.
 - Atomic writes; back up host configuration before every integration change; complete `disconnect` path.
 - Dependency budget: `mcp` + `pyyaml`. CLI on argparse, search on stdlib sqlite3.
-- Linux and macOS first; Windows via WSL. Git sync stays opt-in.
+- Linux and macOS first; Windows via WSL. Git sync is opt-in, canonical-Markdown-only, conflict-stopping, and rebuilds derived state locally.
 
 ## 9. Delivery: vertical slice first
 
@@ -169,7 +169,7 @@ Milestones are slices of the golden scenarios, not horizontal layers.
 - **S1 — Vertical slice:** `init` + `remember` + `recall` + `context` + MCP (4 tools) + `connect` for Claude Code and Codex. Golden scenarios 1–3 pass as tests in an isolated `$HOME`.
 - **S2 — Flywheel:** `review`/`approve` + inbox flow, feedback counters in ranking, MAP.md generation. Scenario 4 passes.
 - **S3 — Migration:** read-only importers (Claude Code memory dirs, Codex guidance, generic Markdown/Obsidian) with dry-run preview, provenance, dedupe, secret filtering.
-- **S4 — Distribution:** pipx/uv polish, doctor coverage, backup/recovery, docs.
+- **S4 — Distribution:** pipx/uv polish, doctor coverage, backup/recovery, docs, and opt-in Git vault sync.
 - **S5 — Scale layer (only if needed):** local embeddings, hybrid retrieval, graph index — without changing the canonical Markdown model.
 
 ## 10. V1 completion criteria

@@ -799,4 +799,9 @@ def doctor() -> dict[str, Any]:
         report.update(connect.host_status())
     except Exception as exc:  # noqa: BLE001 - doctor reports, never crashes
         report["host_status_error"] = repr(exc)
+    try:
+        from . import sync
+        report["sync"] = sync.sync_status()
+    except Exception as exc:  # noqa: BLE001 - doctor reports, never crashes
+        report["sync_status_error"] = repr(exc)
     return report
