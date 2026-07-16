@@ -80,6 +80,14 @@ Four flows the release must make dependable — each one is a test:
 3. **Hard project isolation** — memory from one project is *never* silently injected into another. A wrong match is worse than no match.
 4. **Provenance** — an agent distills a synthesis from earlier memories; `derived_from` links keep the full chain visible in Obsidian.
 
+### See the memory as a graph
+
+<p align="center">
+  <img src="assets/graph.png" width="720" alt="Obsidian graph view of the demo vault — a synthesis node linked to the lessons it was derived from">
+</p>
+
+The vault is plain Markdown with `[[wikilinks]]`, so Obsidian renders it as a knowledge graph for free — syntheses point at the experiences they were derived from. Build this exact vault yourself: `bash examples/demo.sh`, then open `examples/demo-vault` in Obsidian (see [examples/README.md](examples/README.md)).
+
 ### Why nothing else fits
 
 Existing agent-memory systems are either heavy (mem0, Letta, Zep — LLM extraction pipelines, vector stores, managed backends) or Markdown-adjacent but embedding-dependent. The combination Theatrum targets is an open gap:
@@ -211,6 +219,14 @@ Theatrum 自己从不调用 LLM。智能留在 agent 一侧；Theatrum 只负责
 2. **全局偏好** —— 存一次，所有已接入的 agent 跨项目可用。
 3. **项目硬隔离** —— 一个项目的记忆*绝不*悄悄注入另一个项目。错误匹配比没有匹配更糟。
 4. **可溯源** —— agent 从既有记忆提炼综合结论，`derived_from` 链路在 Obsidian 里完整可见。
+
+### 把记忆看成一张图
+
+<p align="center">
+  <img src="assets/graph.png" width="720" alt="demo vault 的 Obsidian 关系图谱——综合结论节点连向它溯源的经验">
+</p>
+
+vault 就是带 `[[wikilink]]` 的纯 Markdown，Obsidian 直接把它渲染成知识图谱——综合结论指向它提炼自的那些经验。亲手复现这张图：`bash examples/demo.sh`，然后用 Obsidian 打开 `examples/demo-vault`（见 [examples/README.md](examples/README.md)）。
 
 ### 为什么现有方案都不合适
 
