@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Theatrum" }]
 dependencies = [
-    "mcp>=1.0.0",
+    "mcp>=1.2.0,<2",  # 2.x renamed FastMCP → MCPServer; the server would not start
     "pyyaml>=6.0",
 ]
 
