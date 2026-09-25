@@ -96,7 +96,7 @@ Existing agent-memory systems are either heavy (mem0, Letta, Zep — LLM extract
 |---|---|
 | Canonical store | Plain Markdown, user-owned |
 | Extraction | None — agents distill, Theatrum stores |
-| Retrieval | SQLite FTS5 (trigram, CJK-friendly) + ranking with floors |
+| Retrieval | SQLite FTS5 (trigram substrings + CJK bigrams, spelling-tolerant fallback) + ranking with floors |
 | Sharing | One MCP stdio server, every agent |
 | Dependencies | `mcp` + `pyyaml`. That's it. |
 | Network | None. Local stdio, no listening port |
@@ -236,7 +236,7 @@ vault 就是带 `[[wikilink]]` 的纯 Markdown，Obsidian 直接把它渲染成�
 |---|---|
 | 事实源 | 纯 Markdown，用户自有 |
 | 抽取 | 无——agent 提炼，Theatrum 存储 |
-| 检索 | SQLite FTS5（trigram，中文友好）+ 带下限的排序公式 |
+| 检索 | SQLite FTS5（trigram 子串 + 中文二元切分，拼写容错兜底）+ 带下限的排序公式 |
 | 共享 | 一个 MCP stdio 服务器，所有 agent |
 | 依赖 | `mcp` + `pyyaml`，就这两个 |
 | 网络 | 无。本地 stdio，不开端口 |

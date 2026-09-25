@@ -153,17 +153,24 @@ def dump_frontmatter(meta: dict[str, Any], body: str) -> str:
 # ---------------------------------------------------------------------------
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
-_UNICODE_SLUG_RE = re.compile(r"[^\w]+", re.UNICODE)
+_UNICODE_SLUG_RE = re.compile(r"[\W_]+", re.UNICODE)
+
+
+def _has_non_latin_letters(text: str) -> bool:
+    """True for CJK/Cyrillic/etc. letters; accented latin (é → e) doesn't count."""
+    return any(ch.isalnum() and not ch.isascii() for ch in unicodedata.normalize("NFKD", text))
 
 
 def _slug(text: str, max_len: int = 40) -> str:
-    ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
-    ascii_text = ascii_text.lower().strip()
-    ascii_text = _SLUG_RE.sub("-", ascii_text).strip("-")
-    if ascii_text:
-        return ascii_text[:max_len].rstrip("-") or uuid.uuid4().hex[:8]
-    # Fallback for non-ASCII titles (e.g. CJK): unicode-aware pass on the original.
-    uni = _UNICODE_SLUG_RE.sub("-", text.lower()).strip("-")
+    # Mixed-language titles keep their original script: an ASCII-only pass
+    # would reduce "凭证与Skill能力必须分离" to just "skill".
+    if not _has_non_latin_letters(text):
+        ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+        ascii_text = ascii_text.lower().strip()
+        ascii_text = _SLUG_RE.sub("-", ascii_text).strip("-")
+        if ascii_text:
+            return ascii_text[:max_len].rstrip("-") or uuid.uuid4().hex[:8]
+    uni = _UNICODE_SLUG_RE.sub("-", unicodedata.normalize("NFKC", text).lower()).strip("-")
     if uni:
         return uni[:max_len].rstrip("-") or uuid.uuid4().hex[:8]
     return uuid.uuid4().hex[:8]

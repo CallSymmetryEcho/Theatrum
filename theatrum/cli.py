@@ -56,18 +56,20 @@ def cmd_recall(args: argparse.Namespace) -> int:
     project = args.project
     if args.scope == "project" and not project:
         project = core.detect_project()
-    hits = _index.recall(
+    result = _index.search(
         args.query,
         scope=args.scope,
         project=project,
         limit=args.limit,
     )
-    if not hits:
+    if not result.hits:
         _print("no matches")
-        return 0
-    for h in hits:
+    for h in result.hits:
         m = h.memory
         _print(f"{m.id}\t{m.type}\t{m.scope}\t{m.project or '-'}\tscore={h.score:.4f}\t{m.title()}")
+    note = _index.other_projects_note(result.other_projects)
+    if note:
+        _print(f"also matched in other projects (withheld): {note} — rerun with --project <id>")
     return 0
 
 

@@ -27,7 +27,7 @@ theatrum connect codex
 - `theatrum init` — create `~/.theatrum/vault` (idempotent).
 - `theatrum remember <content> --type <t> --scope <global|project> [--project ID] [--tags a,b] [--source user_requested|agent_inferred|imported] [--derived-from ID,...] [--confidence low|medium|high] [--title HINT]` — save a memory. `agent_inferred` and `imported` land in `inbox/` as proposed.
 - `theatrum recall <query> [--scope ...] [--project ID] [--limit N]` — ranked search.
-- `theatrum context <query> [--budget N] [--deep] [--project ID]` — MAP.md header + top memories packed under a token budget (chars/4).
+- `theatrum context <query> [--budget N] [--deep] [--project ID]` — MAP.md header + top memories packed under a token budget (~4 chars/token for latin text, 1 token per CJK character). Matches withheld from other projects are named in a closing line, never included.
 - `theatrum review` — list proposed (inbox) memories awaiting curation.
 - `theatrum approve <id> [<id> ...]` — promote proposed memories to active.
 - `theatrum forget <id> [<id> ...]` — delete permanently. Git is the recovery path.
@@ -41,7 +41,7 @@ theatrum connect codex
 
 - `memory_remember(content, type, scope, project=None, tags=None, source="user_requested", derived_from=None, confidence="medium", title=None)` — save a memory. `user_requested` → active; anything else → proposed (inbox, excluded from recall/context until approved).
 - `memory_recall(query, scope=None, project=None, limit=10)` — ranked search. Project isolation is a hard filter; `project=None` returns global-only.
-- `memory_context(query, budget=2000, deep=False, project=None)` — MAP.md header + top memories packed under `budget` tokens.
+- `memory_context(query, budget=2000, deep=False, project=None)` — MAP.md header + top memories packed under `budget` tokens; names (never includes) matches withheld from other projects.
 - `memory_feedback(ids, outcome)` — increment `used` / `dead_end` counters; feeds ranking.
 
 ## Recovery

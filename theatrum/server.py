@@ -95,8 +95,9 @@ def memory_context(
     deep: bool = False,
     project: str | None = None,
 ) -> str:
-    """MAP.md header + top memories packed under ``budget`` tokens (chars/4).
+    """MAP.md header + top memories packed under ``budget`` tokens.
     When ``project`` is None, only global-scope memories are included.
+    Matches in other projects are named (never included) in a closing line.
     """
     return _index.build_context(query, budget=budget, deep=deep, project=project)
 

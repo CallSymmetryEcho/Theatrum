@@ -109,7 +109,8 @@ Theatrum never runs an LLM itself. The intelligence stays on the agent side; The
    ```text
    score = relevance × recency × confidence_boost × scope_boost × feedback_boost
 
-   relevance        = -bm25(fts)                     # FTS5 returns negative; lower = better
+   relevance        = -bm25(trigram) - bm25(terms)   # FTS5 returns negative; lower = better
+                     # trigram: substrings; terms: words + CJK bigrams (2-char words, unspaced prose)
    recency          = 0.5 + 0.5·exp(-0.1·age_days)   # floored at 0.5 — old memories never die
    confidence_boost = 1.0 + 0.3·confidence           # confidence ∈ [0, 1]
    scope_boost      = 1.2 if project match else 1.0
@@ -117,7 +118,8 @@ Theatrum never runs an LLM itself. The intelligence stays on the agent side; The
                      # log-smoothed and floored: new memories start neutral (no Matthew effect)
    ```
 
-3. Dedupe, then cut deterministically at the caller's token budget (chars/4 estimate).
+3. Dedupe, then cut deterministically at the caller's token budget (~4 chars/token for latin text, 1 token per CJK character).
+4. Nothing in scope matched exactly → spelling-tolerant fallback (padded-trigram similarity ≥ 0.7 against the indexed vocabulary, strict majority of query words). Matches withheld from other projects are reported by project name and count only, so the agent can ask for them explicitly.
 
 Text relevance stays the dominant signal: every boost has a floor, so metadata tunes the order but can never bury a strong BM25 match. All parameters above are starting points, expected to be tuned against real vault data.
 
