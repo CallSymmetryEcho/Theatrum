@@ -168,26 +168,45 @@ def _confidence_float(conf: str) -> float:
     return core.CONFIDENCE_TO_FLOAT.get(conf, 0.5)
 
 
+def _query_terms(raw: str) -> list[str]:
+    """Whitespace-split query terms with control chars and double quotes removed."""
+    # Remove control characters (U+0000–U+001F and U+007F)
+    cleaned = re.sub(r"[\x00-\x1f\x7f]", " ", raw)
+    tokens = [t.replace('"', "") for t in re.findall(r"[^\s]+", cleaned)]
+    return [t for t in tokens if t]
+
+
 def _fts_query(raw: str) -> str:
     """
     Turn user text into a safe FTS5 MATCH expression.
     Trigram tokenizer needs 3+ chars per term. Terms are OR-joined; the
-    engine scores intersection strongly via BM25 already.
+    engine scores intersection strongly via BM25 already. Shorter terms are
+    handled by the LIKE fallback in ``recall``.
 
     Sanitization steps:
     1. Strip control characters (including newlines) from the raw query.
     2. Split on whitespace, strip quotes from each token.
     3. Wrap every surviving token as a quoted phrase.
-    4. If no tokens survive, return "" (empty string) so the caller returns []
-       without executing a MATCH.
+    4. If no tokens survive, return "" (empty string) so the caller skips
+       the MATCH.
     """
-    # Remove control characters (U+0000–U+001F and U+007F)
-    cleaned = re.sub(r"[\x00-\x1f\x7f]", " ", raw)
-    tokens = [t.replace('"', "") for t in re.findall(r"[^\s]+", cleaned)]
-    tokens = [t for t in tokens if len(t) >= 3]
+    tokens = [t for t in _query_terms(raw) if len(t) >= 3]
     if not tokens:
         return ""
     return " OR ".join(f'"{t}"' for t in tokens)
+
+
+def _short_terms(raw: str) -> list[str]:
+    """
+    Two-char terms the trigram index cannot MATCH: most Chinese words
+    (迁移, 绘图) and short codes (T7). One-char terms are dropped as noise.
+    """
+    return [t for t in _query_terms(raw) if len(t) == 2]
+
+
+# ponytail: flat per-term weight for LIKE hits (BM25 is unavailable for them).
+# Tune if short-term hits crowd out real BM25 matches.
+SHORT_TERM_WEIGHT = 1.0
 
 
 @dataclass
@@ -220,26 +239,66 @@ def recall(
     - **when ``project`` is None, project-scoped memories are EXCLUDED entirely
       (global-scope only).** Cross-project mixing is impossible through any query path.
     """
+    hits, _ = search(
+        query, scope=scope, project=project, limit=limit,
+        include_proposed=include_proposed,
+    )
+    return hits
+
+
+def search(
+    query: str,
+    *,
+    scope: str | None = None,
+    project: str | None = None,
+    limit: int = 10,
+    include_proposed: bool = False,
+) -> tuple[list[Hit], dict[str, int]]:
+    """
+    ``recall`` plus the matches the project filter removed.
+
+    Returns ``(hits, hidden)`` where ``hidden`` maps project id → number of
+    matching project-scoped memories excluded because ``project`` is None.
+    It is only filled when both ``project`` and ``scope`` are None, so callers
+    can point at those projects instead of reporting "nothing found".
+    """
     fts_expr = _fts_query(query)
-    if not fts_expr:
-        return []
+    short_terms = _short_terms(query)
+    if not fts_expr and not short_terms:
+        return [], {}
     ensure_index()
+    relevance_by_id: dict[str, float] = {}
     conn = _connect()
     try:
-        try:
+        if fts_expr:
+            try:
+                rows = conn.execute(
+                    "SELECT memories_fts.id, bm25(memories_fts) AS bm "
+                    "FROM memories_fts WHERE memories_fts MATCH ?",
+                    (fts_expr,),
+                ).fetchall()
+            except sqlite3.OperationalError:  # ponytail: should now be unreachable after _fts_query sanitization
+                rows = []
+            for row in rows:
+                # FTS5 bm25 is negative; lower = better, so negate.
+                relevance_by_id[row["id"]] = -float(row["bm"])
+        for term in short_terms:
+            # ponytail: full scan per short term; fine for a personal vault.
+            pattern = "%" + re.sub(r"([\\%_])", r"\\\1", term) + "%"
             rows = conn.execute(
-                "SELECT memories_fts.id, bm25(memories_fts) AS bm "
-                "FROM memories_fts WHERE memories_fts MATCH ?",
-                (fts_expr,),
+                "SELECT id FROM memories_fts WHERE title LIKE ?1 ESCAPE '\\' "
+                "OR body LIKE ?1 ESCAPE '\\' OR tags LIKE ?1 ESCAPE '\\'",
+                (pattern,),
             ).fetchall()
-        except sqlite3.OperationalError:  # ponytail: should now be unreachable after _fts_query sanitization
-            return []
+            for row in rows:
+                relevance_by_id[row["id"]] = relevance_by_id.get(row["id"], 0.0) + SHORT_TERM_WEIGHT
     finally:
         conn.close()
 
     hits: list[Hit] = []
-    for row in rows:
-        mem = core.find_memory(row["id"])
+    hidden: dict[str, int] = {}
+    for mem_id, relevance in relevance_by_id.items():
+        mem = core.find_memory(mem_id)
         if mem is None:
             continue
         if not include_proposed and mem.status != "active":
@@ -249,6 +308,8 @@ def recall(
         # memories are mixed in regardless of query match.
         if project is None:
             if mem.scope == "project":
+                if scope is None:
+                    hidden[mem.project] = hidden.get(mem.project, 0) + 1
                 continue
         else:
             if mem.scope == "project" and mem.project != project:
@@ -258,8 +319,6 @@ def recall(
                 continue
             if scope == "project" and mem.scope != "project":
                 continue
-        bm = float(row["bm"])
-        relevance = -bm  # FTS5 bm25 is negative; lower = better, so negate.
         recency = 0.5 + 0.5 * math.exp(-0.1 * _age_days(mem.created))
         conf_boost = 1.0 + 0.3 * _confidence_float(mem.confidence)
         scope_boost = 1.2 if (project and mem.scope == "project" and mem.project == project) else 1.0
@@ -275,7 +334,15 @@ def recall(
             continue
         seen.add(h.memory.id)
         deduped.append(h)
-    return deduped[: max(0, int(limit))]
+    return deduped[: max(0, int(limit))], hidden
+
+
+def hidden_hint(hidden: dict[str, int]) -> str:
+    """One-line pointer at project-scoped matches a global-only query skipped."""
+    if not hidden:
+        return ""
+    where = ", ".join(f"{p} ({n})" for p, n in sorted(hidden.items()))
+    return f"{sum(hidden.values())} more match(es) in project-scoped memories: {where}. Pass project=<id> to see them."
 
 
 # ---------------------------------------------------------------------------
@@ -308,7 +375,9 @@ def build_context(
     used_tokens = estimate_tokens(header)
 
     limit = 1000 if deep else 20
-    hits = recall(query, project=project, limit=limit)
+    hits, hidden = search(query, project=project, limit=limit)
+    if hidden:
+        parts.append(f"_{hidden_hint(hidden)}_")
 
     for h in hits:
         section = _pack_memory(h.memory)

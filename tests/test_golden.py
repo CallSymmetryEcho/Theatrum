@@ -458,6 +458,69 @@ def test_t3_nasty_queries_dont_crash():
 
 
 # ---------------------------------------------------------------------------
+# T3b: two-char terms (most Chinese words, short codes) match via LIKE fallback
+# ---------------------------------------------------------------------------
+
+def test_t3b_two_char_terms_match():
+    core, idx = _mods()
+    core.init_vault()
+
+    migration = core.remember(
+        content="# 此次eLabFTW迁移的核心原则\n边界验证。",
+        type="synthesis", scope="global", source="user_requested",
+    )
+    drive = core.remember(
+        content="# plotting data\nRead the copy on the T7 Shield drive.",
+        type="decision", scope="global", source="user_requested",
+    )
+    wildcard = core.remember(
+        content="# unrelated\nnothing to see.",
+        type="lesson", scope="global", source="user_requested",
+    )
+
+    assert [h.memory.id for h in idx.recall("迁移")] == [migration.id]
+    assert [h.memory.id for h in idx.recall("t7")] == [drive.id]  # case-insensitive
+    # LIKE wildcards in the query are literals, not patterns.
+    assert idx.recall("%_") == []
+    # One-char terms stay dropped (too noisy).
+    assert idx.recall("的") == []
+    # Mixed query: long term via BM25 plus short term via LIKE, both counted.
+    ids = [h.memory.id for h in idx.recall("Shield 迁移")]
+    assert set(ids) == {migration.id, drive.id}
+    assert wildcard.id not in ids
+
+
+# ---------------------------------------------------------------------------
+# T2b: global-only query reports the project-scoped matches it hid
+# ---------------------------------------------------------------------------
+
+def test_t2b_hidden_project_matches_are_reported():
+    core, idx = _mods()
+    core.init_vault()
+
+    core.remember(
+        content="# restore gates\nbanana restore lesson.",
+        type="lesson", scope="project", project="github.com/acme/x",
+        source="user_requested",
+    )
+    global_mem = core.remember(
+        content="# global\nbanana restore note.",
+        type="lesson", scope="global", source="user_requested",
+    )
+
+    hits, hidden = idx.search("banana restore")
+    assert [h.memory.id for h in hits] == [global_mem.id]
+    assert hidden == {"github.com/acme/x": 1}
+    assert "github.com/acme/x" in idx.hidden_hint(hidden)
+
+    # Explicit project or explicit scope: nothing is "hidden".
+    assert idx.search("banana restore", project="github.com/acme/x")[1] == {}
+    assert idx.search("banana restore", scope="global")[1] == {}
+
+    assert "github.com/acme/x" in idx.build_context("banana restore")
+
+
+# ---------------------------------------------------------------------------
 # T4: frontmatter round-trip with nasty body content
 # ---------------------------------------------------------------------------
 
