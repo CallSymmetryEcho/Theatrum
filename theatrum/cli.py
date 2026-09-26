@@ -56,7 +56,7 @@ def cmd_recall(args: argparse.Namespace) -> int:
     project = args.project
     if args.scope == "project" and not project:
         project = core.detect_project()
-    hits = _index.recall(
+    hits, hidden = _index.search(
         args.query,
         scope=args.scope,
         project=project,
@@ -64,10 +64,11 @@ def cmd_recall(args: argparse.Namespace) -> int:
     )
     if not hits:
         _print("no matches")
-        return 0
     for h in hits:
         m = h.memory
         _print(f"{m.id}\t{m.type}\t{m.scope}\t{m.project or '-'}\tscore={h.score:.4f}\t{m.title()}")
+    if hidden:
+        _print(f"hint: {_index.hidden_hint(hidden)}")
     return 0
 
 
