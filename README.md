@@ -90,16 +90,19 @@ The vault is plain Markdown with `[[wikilinks]]`, so Obsidian renders it as a kn
 
 ### Why nothing else fits
 
-Existing agent-memory systems are either heavy (mem0, Letta, Zep — LLM extraction pipelines, vector stores, managed backends) or Markdown-adjacent but embedding-dependent. The combination Theatrum targets is an open gap:
+Existing agent-memory systems are either heavy (mem0, Letta, Zep — LLM extraction pipelines, vector stores, managed backends) or Markdown-adjacent but embedding-dependent. If you use Claude Code, the two you've probably met are claude-mem and Claude Code's built-in memory:
 
-| | Theatrum |
-|---|---|
-| Canonical store | Plain Markdown, user-owned |
-| Extraction | None — agents distill, Theatrum stores |
-| Retrieval | SQLite FTS5 (trigram, CJK-friendly) + ranking with floors |
-| Sharing | One MCP stdio server, every agent |
-| Dependencies | `mcp` + `pyyaml`. That's it. |
-| Network | None. Local stdio, no listening port |
+| | **Theatrum** | claude-mem | Claude Code built-in memory |
+|---|---|---|---|
+| What gets saved | Distilled experience; agent guesses wait in an inbox for your approval | Every tool call, captured by hooks and compressed by an LLM | Notes Claude decides to write |
+| Shared across agents | Claude Code + Codex through one MCP server | Many hosts, one plugin per host | Claude Code only |
+| Canonical store | Plain Markdown — grep it, Git it, open it in Obsidian | SQLite + Chroma vector DB | Markdown, per project |
+| LLM cost of memory | None — Theatrum never calls a model | Compression calls (your plan, your key, or a hosted tier) | Inside your session |
+| Retrieval | SQLite FTS5 (trigram, CJK-friendly) + feedback-weighted ranking | Keyword + vector hybrid | Index loaded at session start |
+| Runtime | One stdio process, no port; `mcp` + `pyyaml` | Bun worker with a local HTTP API | Built in |
+| Cross-machine | Optional Git sync to a remote you own | Optional hosted sync | None |
+
+Pick claude-mem if you want everything recorded with zero effort. Pick Theatrum if you want a small, reviewable memory you own, shared by every agent, with no model bill.
 
 Vector search and knowledge graphs stay optional, derived, and *later* — added only when FTS5 provably falls short, without changing who owns the memory.
 
@@ -236,16 +239,19 @@ vault 就是带 `[[wikilink]]` 的纯 Markdown，Obsidian 直接把它渲染成�
 
 ### 为什么现有方案都不合适
 
-现有 agent 记忆系统要么太重（mem0、Letta、Zep——LLM 抽取管线、向量库、托管后端），要么接近 Markdown 但依赖 embedding。Theatrum 瞄准的组合目前是空白：
+现有 agent 记忆系统要么太重（mem0、Letta、Zep——LLM 抽取管线、向量库、托管后端），要么接近 Markdown 但依赖 embedding。用 Claude Code 的话，你多半见过 claude-mem 和 Claude Code 自带的记忆：
 
-| | Theatrum |
-|---|---|
-| 事实源 | 纯 Markdown，用户自有 |
-| 抽取 | 无——agent 提炼，Theatrum 存储 |
-| 检索 | SQLite FTS5（trigram，中文友好）+ 带下限的排序公式 |
-| 共享 | 一个 MCP stdio 服务器，所有 agent |
-| 依赖 | `mcp` + `pyyaml`，就这两个 |
-| 网络 | 无。本地 stdio，不开端口 |
+| | **Theatrum** | claude-mem | Claude Code 自带记忆 |
+|---|---|---|---|
+| 存什么 | 提炼后的经验；agent 自己推断的先进 inbox 等你审核 | 每一次工具调用，由钩子采集、LLM 压缩 | Claude 自己决定写的笔记 |
+| 跨 agent 共享 | 一个 MCP 服务器同时服务 Claude Code 和 Codex | 支持很多宿主，每个宿主装一个插件 | 只有 Claude Code |
+| 事实源 | 纯 Markdown——能 grep、能进 Git、能用 Obsidian 打开 | SQLite + Chroma 向量库 | Markdown，按项目分开 |
+| 记忆的模型费用 | 无——Theatrum 从不调用模型 | 压缩要调模型（用你的套餐、你的 key 或托管服务） | 算在会话里 |
+| 检索 | SQLite FTS5（trigram，中文友好）+ 按反馈加权排序 | 关键词 + 向量混合 | 会话开始时加载索引 |
+| 运行方式 | 一个 stdio 进程，不开端口；依赖只有 `mcp` + `pyyaml` | Bun 后台服务，带本地 HTTP API | 内置 |
+| 多台机器 | 可选：通过你自己的 Git 远端同步 | 可选：托管同步 | 无 |
+
+想要零操作、什么都自动记下来，选 claude-mem。想要一份小而可审核、归你所有、所有 agent 共用、不花模型钱的记忆，选 Theatrum。
 
 向量检索和知识图谱是可选的、派生的、*以后的事*——只在 FTS5 被证明不够用时加入，且不改变记忆的所有权。
 
