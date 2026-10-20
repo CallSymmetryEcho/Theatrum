@@ -359,6 +359,53 @@ def test_codex_connect_disconnect_preserves_other_keys(monkeypatch):
     assert len(backups) >= 2
 
 
+# Codex rewrites config.toml itself: it adds keys to our table, writes its own
+# tables between our markers, and can drop the begin marker entirely.
+_CODEX_BEGIN = "# theatrum: begin (do not edit manually — managed by `theatrum connect codex`)\n"
+_CODEX_REWRITTEN_TAIL = (
+    '[mcp_servers.theatrum]\ntype = "stdio"\ncommand = "/old/theatrum"\nargs = ["serve"]\n\n'
+    '[mcp_servers.node_repl]\ncommand = "node"\n\n'
+    '[plugins."ponytail@ponytail"]\nenabled = true\n\n'
+    "[hooks.state]\n\n"
+    '[hooks.state."ponytail@ponytail:hooks/h.json:session_start:0:0"]\ntrusted_hash = "abc"\n'
+    "# theatrum: end\n"
+)
+
+
+@pytest.mark.parametrize("begin", [_CODEX_BEGIN, ""], ids=["markers", "begin-marker-lost"])
+def test_codex_connect_disconnect_keeps_foreign_tables_inside_markers(monkeypatch, begin):
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # py3.10: pytest ships tomli
+        import tomli as tomllib
+    _mods()
+    from theatrum import connect as connect_mod
+
+    cfg = Path(os.environ["HOME"]) / ".codex" / "config.toml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    original = '[projects."/home/u"]\ntrust_level = "trusted"\n\n' + begin + _CODEX_REWRITTEN_TAIL
+    cfg.write_text(original, encoding="utf-8")
+    monkeypatch.setattr(connect_mod, "_CODEX_CONFIG", cfg)
+    monkeypatch.setattr(connect_mod, "_claude_binary", lambda: None)
+
+    def without_theatrum(data):
+        data["mcp_servers"].pop("theatrum", None)
+        return data
+
+    foreign = without_theatrum(tomllib.loads(original))
+    assert connect_mod.host_status()["codex_connected"] is True
+
+    connect_mod._connect_codex()
+    data = tomllib.loads(cfg.read_text(encoding="utf-8"))
+    assert data["mcp_servers"]["theatrum"]["args"] == ["serve"]
+    assert without_theatrum(data) == foreign
+
+    connect_mod._disconnect_codex()
+    data = tomllib.loads(cfg.read_text(encoding="utf-8"))
+    assert "theatrum" not in data["mcp_servers"]
+    assert data == foreign
+
+
 # ---------------------------------------------------------------------------
 # T1: Path traversal rejected, no file written outside vault
 # ---------------------------------------------------------------------------

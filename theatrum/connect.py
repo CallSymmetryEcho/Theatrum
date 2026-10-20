@@ -134,11 +134,22 @@ def _claude_manual_instructions() -> str:
 # Codex (edit ~/.codex/config.toml)
 #
 # We use a tiny hand-rolled TOML patcher for the single [mcp_servers.theatrum]
-# section — the stdlib has no TOML writer, and we're strictly limited to
-# ``mcp`` + ``pyyaml``. Never touches other sections/keys.
-# ponytail: this is only safe because we own exactly one section. If Codex ever
-# adds more theatrum-managed keys, replace this with a proper TOML round-trip.
+# table — the stdlib has no TOML writer, and we're strictly limited to
+# ``mcp`` + ``pyyaml``. Never touches other tables/keys.
+# Codex rewrites config.toml itself: it adds keys to our table, writes its own
+# tables between our begin/end markers, and can drop the begin marker. So the
+# markers are decoration only — we remove by table header, never by marker span.
+# ponytail: line-based; a line starting with "[" inside a multi-line value in
+# our table ends the scan early, and the TOML parse check then refuses the write.
 # ---------------------------------------------------------------------------
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # py3.10
+    try:
+        import tomli as tomllib  # not a dependency; used only if already present
+    except ModuleNotFoundError:
+        tomllib = None
 
 _CODEX_CONFIG = Path.home() / ".codex" / "config.toml"
 
@@ -151,22 +162,47 @@ CODEX_BLOCK_TEMPLATE = (
     "# theatrum: end\n"
 )
 
-_CODEX_BLOCK_RE = re.compile(
-    r"\n?^# theatrum: begin\b[^\n]*$.*?^# theatrum: end$\n?",
-    re.DOTALL | re.MULTILINE,
+# [mcp_servers.theatrum] or a subtable like [mcp_servers.theatrum.env].
+_CODEX_OURS_RE = re.compile(
+    r"""^[ \t]*\[[ \t]*mcp_servers[ \t]*\.[ \t]*(?:theatrum|"theatrum"|'theatrum')[ \t]*[\].]""",
+    re.MULTILINE,
 )
+_CODEX_MARKER_RE = re.compile(r"# theatrum: (?:begin\b|end$)")
+
+
+def _strip_codex_theatrum(text: str) -> str:
+    """Drop our table (header, keys, blank lines) and marker comments; keep everything else."""
+    out, ours = [], False
+    for line in text.splitlines(keepends=True):
+        s = line.strip()
+        if s.startswith("["):
+            ours = bool(_CODEX_OURS_RE.match(line))
+        if _CODEX_MARKER_RE.match(s) or (ours and not s.startswith("#")):
+            continue
+        out.append(line)
+    return "".join(out)
+
+
+def _check_codex_toml(p: Path, new: str) -> None:
+    if tomllib is None:
+        return
+    try:
+        tomllib.loads(new)
+    except tomllib.TOMLDecodeError as exc:
+        raise RuntimeError(f"refusing to write {p}: result would not be valid TOML ({exc}); file left unchanged")
 
 
 def _connect_codex() -> str:
     p = _CODEX_CONFIG
     p.parent.mkdir(parents=True, exist_ok=True)
     existing = p.read_text(encoding="utf-8") if p.exists() else ""
-    backup = _backup(p)
-    # Remove any prior theatrum block, then append a fresh one.
-    stripped = _CODEX_BLOCK_RE.sub("\n", existing).rstrip() + "\n"
+    # Remove any prior theatrum table, then append a fresh one.
+    stripped = _strip_codex_theatrum(existing).rstrip() + "\n"
     if stripped.strip() == "":
         stripped = ""
     new = stripped + CODEX_BLOCK_TEMPLATE.format(cmd=_theatrum_command())
+    _check_codex_toml(p, new)
+    backup = _backup(p)
     core.atomic_write_text(p, new)
     msg = f"connected: codex → {p}"
     if backup:
@@ -179,10 +215,12 @@ def _disconnect_codex() -> str:
     if not p.exists():
         return "codex config not found; nothing to disconnect."
     existing = p.read_text(encoding="utf-8")
-    if "# theatrum: begin" not in existing:
-        return "no theatrum block in codex config; nothing to do."
+    stripped = _strip_codex_theatrum(existing)
+    if stripped == existing:
+        return "no theatrum entry in codex config; nothing to do."
+    new = stripped.rstrip() + "\n"
+    _check_codex_toml(p, new)
     backup = _backup(p)
-    new = _CODEX_BLOCK_RE.sub("\n", existing).rstrip() + "\n"
     core.atomic_write_text(p, new)
     msg = f"disconnected: codex → {p}"
     if backup:
@@ -215,7 +253,7 @@ def host_status() -> dict[str, bool | None]:
             claude = proc.returncode == 0
         except (OSError, subprocess.TimeoutExpired):
             claude = None
-    codex = _CODEX_CONFIG.exists() and "# theatrum: begin" in _CODEX_CONFIG.read_text(encoding="utf-8")
+    codex = _CODEX_CONFIG.exists() and bool(_CODEX_OURS_RE.search(_CODEX_CONFIG.read_text(encoding="utf-8")))
     return {"claude_connected": claude, "codex_connected": codex}
 
 
