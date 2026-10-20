@@ -491,6 +491,37 @@ def test_t3b_two_char_terms_match():
 
 
 # ---------------------------------------------------------------------------
+# T3c: unspaced CJK queries split into bigrams; isolation still holds
+# ---------------------------------------------------------------------------
+
+def test_t3c_unspaced_cjk_queries_keep_isolation():
+    core, idx = _mods()
+    core.init_vault()
+
+    global_mem = core.remember(
+        content="# Theatrum 记忆服务器\n先安装，再配置技能。",
+        type="decision", scope="global", source="user_requested",
+    )
+    project_a = core.remember(
+        content="# 项目记忆\n只属于 a 项目的记忆。",
+        type="lesson", scope="project", project="github.com/acme/a",
+        source="user_requested",
+    )
+
+    def ids(q, **kw):
+        return [h.memory.id for h in idx.recall(q, **kw)]
+
+    assert ids("记忆") == [global_mem.id]
+    # Hard isolation: project a never leaks into project b.
+    assert ids("记忆", project="github.com/acme/b") == [global_mem.id]
+    assert set(ids("记忆", project="github.com/acme/a")) == {global_mem.id, project_a.id}
+    # No spaces, words not adjacent in the memory: bigrams 安装/技能 still hit.
+    assert ids("安装技能") == [global_mem.id]
+    # Latin glued to CJK splits at the script boundary.
+    assert ids("theatrum记忆服务", project="github.com/acme/b") == [global_mem.id]
+
+
+# ---------------------------------------------------------------------------
 # T2b: global-only query reports the project-scoped matches it hid
 # ---------------------------------------------------------------------------
 

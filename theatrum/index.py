@@ -168,11 +168,19 @@ def _confidence_float(conf: str) -> float:
     return core.CONFIDENCE_TO_FLOAT.get(conf, 0.5)
 
 
+# Scripts written without spaces between words: kana, CJK ideographs, hangul.
+_CJK = "぀-ヿ㐀-䶿一-鿿가-힯豈-﫿"
+
+
 def _query_terms(raw: str) -> list[str]:
-    """Whitespace-split query terms with control chars and double quotes removed."""
+    """
+    Query terms with control chars and double quotes removed. Splits on
+    whitespace and at CJK/non-CJK boundaries ("eLabFTW迁移" → eLabFTW, 迁移).
+    """
     # Remove control characters (U+0000–U+001F and U+007F)
     cleaned = re.sub(r"[\x00-\x1f\x7f]", " ", raw)
-    tokens = [t.replace('"', "") for t in re.findall(r"[^\s]+", cleaned)]
+    tokens = re.findall(rf"[{_CJK}]+|[^\s{_CJK}]+", cleaned)
+    tokens = [t.replace('"', "") for t in tokens]
     return [t for t in tokens if t]
 
 
@@ -200,8 +208,18 @@ def _short_terms(raw: str) -> list[str]:
     """
     Two-char terms the trigram index cannot MATCH: most Chinese words
     (迁移, 绘图) and short codes (T7). One-char terms are dropped as noise.
+    Longer CJK runs also contribute overlapping bigrams, so an unspaced
+    phrase matches memories holding its words apart (安装技能 → 安装 装技 技能).
     """
-    return [t for t in _query_terms(raw) if len(t) == 2]
+    terms: list[str] = []
+    for t in _query_terms(raw):
+        if len(t) == 2:
+            terms.append(t)
+        elif len(t) > 2 and re.fullmatch(f"[{_CJK}]+", t):
+            # ponytail: bigrams stand in for a word segmenter (no jieba); junk
+            # bigrams like 装技 rarely match. Add segmentation if noise hurts.
+            terms += [t[i : i + 2] for i in range(len(t) - 1)]
+    return list(dict.fromkeys(terms))
 
 
 # ponytail: flat per-term weight for LIKE hits (BM25 is unavailable for them).

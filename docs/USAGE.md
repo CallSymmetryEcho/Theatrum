@@ -43,7 +43,7 @@ theatrum connect codex
 ## MCP tools
 
 - `memory_remember(content, type, scope, project=None, tags=None, source="user_requested", derived_from=None, confidence="medium", title=None)` — save a memory. `user_requested` → active; anything else → proposed (inbox, excluded from recall/context until approved).
-- `memory_recall(query, scope=None, project=None, limit=10)` — ranked search. Project isolation is a hard filter; `project=None` returns global-only, plus a final `{"note", "hidden_in_projects"}` item when project-scoped memories also matched. Two-char terms (most Chinese words, codes like `T7`) match by substring since the trigram index needs 3+ chars.
+- `memory_recall(query, scope=None, project=None, limit=10)` — ranked search. Project isolation is a hard filter; `project=None` returns global-only, plus a final `{"note", "hidden_in_projects"}` item when project-scoped memories also matched. Two-char terms (most Chinese words, codes like `T7`) match by substring since the trigram index needs 3+ chars; unspaced CJK phrases also match by overlapping bigrams (`安装技能` → `安装`, `技能`).
 - `memory_context(query, budget=2000, deep=False, project=None)` — MAP.md header + top memories packed under `budget` tokens.
 - `memory_feedback(ids, outcome)` — increment `used` / `dead_end` counters; feeds ranking.
 
