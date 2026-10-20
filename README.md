@@ -112,6 +112,7 @@ pipx install "git+https://github.com/CallSymmetryEcho/Theatrum"   # or: uv tool 
 theatrum init                  # vault at ~/.theatrum/vault
 theatrum connect claude        # wires the MCP server into Claude Code
 theatrum connect codex         # ...and Codex (config backed up first, always)
+# add --hooks to either: inject this project's memories at every session start
 
 # save your first experience
 theatrum remember "## Problem
@@ -257,6 +258,7 @@ pipx install "git+https://github.com/CallSymmetryEcho/Theatrum"   # 或：uv too
 theatrum init                  # vault 建在 ~/.theatrum/vault
 theatrum connect claude        # 把 MCP 服务器接入 Claude Code
 theatrum connect codex         # ……以及 Codex（改配置前必先备份）
+# 任一命令加 --hooks：每次会话开始自动注入本项目记忆
 
 # 存下第一条经验
 theatrum remember "## Problem

@@ -949,11 +949,13 @@ def test_s4_doctor_wiring_keys():
     assert "vault_git" in report and report["vault_git"] is False
     assert "claude_connected" in report  # value may be True/False/None depending on host
     assert "codex_connected" in report and report["codex_connected"] is False
+    assert report["claude_session_hook"] is False and report["codex_session_hook"] is False
 
-    # Wire codex under the isolated HOME → codex_connected flips True.
-    connect_mod._connect_codex()
+    # Wire codex (with hook) under the isolated HOME → both codex keys flip True.
+    connect_mod.connect_host("codex", hooks=True)
     report2 = core.doctor()
     assert report2["codex_connected"] is True
+    assert report2["codex_session_hook"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -974,3 +976,74 @@ def test_s4_init_git_hint(capsys):
     assert rc == 0
     out2 = capsys.readouterr().out
     assert "git init" not in out2
+
+
+# ---------------------------------------------------------------------------
+# SessionStart hook: write / merge / remove without touching other settings
+# ---------------------------------------------------------------------------
+
+def test_session_hook_install_merge_remove():
+    import json
+    import theatrum.connect as connect_mod
+
+    settings = Path(os.environ["HOME"]) / ".claude" / "settings.json"
+    settings.parent.mkdir(parents=True)
+    original = {
+        "model": "opus",
+        "hooks": {
+            "SessionStart": [{"matcher": "startup", "hooks": [{"type": "command", "command": "echo mine"}]}],
+            "Stop": [{"hooks": [{"type": "command", "command": "echo stop"}]}],
+        },
+    }
+    settings.write_text(json.dumps(original), encoding="utf-8")
+
+    assert "installed" in connect_mod.install_session_hook(settings)
+    data = json.loads(settings.read_text(encoding="utf-8"))
+    assert data["model"] == "opus" and data["hooks"]["Stop"] == original["hooks"]["Stop"]
+    assert data["hooks"]["SessionStart"][0] == original["hooks"]["SessionStart"][0]
+    ours = data["hooks"]["SessionStart"][1]["hooks"]
+    assert len(ours) == 1 and " context --budget " in ours[0]["command"]
+    assert connect_mod.has_session_hook(settings)
+
+    # Idempotent: second install is a no-op, a stale command path is replaced, never duplicated.
+    assert "already installed" in connect_mod.install_session_hook(settings)
+    ours[0]["command"] = "/old/theatrum context " + connect_mod.HOOK_MARKER
+    settings.write_text(json.dumps(data), encoding="utf-8")
+    connect_mod.install_session_hook(settings)
+    data = json.loads(settings.read_text(encoding="utf-8"))
+    cmds = [h["command"] for g in data["hooks"]["SessionStart"] for h in g["hooks"]]
+    assert sum(connect_mod.HOOK_MARKER in c for c in cmds) == 1 and "/old/theatrum" not in str(cmds)
+
+    # Remove restores the original exactly; nothing left to remove afterwards.
+    assert "removed" in connect_mod.remove_session_hook(settings)
+    assert json.loads(settings.read_text(encoding="utf-8")) == original
+    assert not connect_mod.has_session_hook(settings)
+    assert "none" in connect_mod.remove_session_hook(settings)
+    assert list(settings.parent.glob("settings.json.bak-*"))
+
+    # An empty hooks table is not ours; broken JSON is refused, not overwritten.
+    settings.write_text('{"hooks": {}}', encoding="utf-8")
+    assert not connect_mod.has_session_hook(settings)
+    settings.write_text("{not json", encoding="utf-8")
+    with pytest.raises(ValueError):
+        connect_mod.install_session_hook(settings)
+    assert settings.read_text(encoding="utf-8") == "{not json"
+
+
+def test_session_brief_is_project_isolated_and_budgeted(capsys):
+    from theatrum import cli
+    core, idx = _mods()
+    core.init_vault()
+    for proj, word in [("github.com/acme/a", "alpha"), ("github.com/acme/b", "bravo")]:
+        core.remember(content=f"# {word} lesson\n{word} detail.", type="lesson", scope="project",
+                      project=proj, source="user_requested")
+    core.remember(content="# global pref\nprefer tabs.", type="preference", scope="global",
+                  source="user_requested")
+
+    assert cli.main(["context", "--project", "github.com/acme/a"]) == 0
+    out = capsys.readouterr().out
+    assert "alpha lesson" in out and "global pref" in out
+    assert "bravo" not in out and "## Recent" not in out  # MAP.md lists other projects' titles
+
+    assert "alpha" not in idx.build_context("", project=None)
+    assert "### " not in idx.build_context("", budget=10, project="github.com/acme/a")

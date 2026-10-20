@@ -4,7 +4,7 @@ Host wiring (connect/disconnect) and any host-side utilities.
 Rules:
 - ALWAYS back up the host file before touching it (timestamped copy).
 - Never touch any keys other than the ``theatrum`` MCP server entry.
-- ``disconnect`` fully reverses ``connect``.
+- ``disconnect`` fully reverses ``connect`` (including the ``--hooks`` SessionStart hook).
 - Claude Code: prefer ``claude mcp add --scope user theatrum -- theatrum serve``
   when the ``claude`` binary is on PATH; else print manual instructions.
 - Codex: edit ``~/.codex/config.toml`` [mcp_servers.theatrum] with the resolved
@@ -13,8 +13,11 @@ Rules:
 
 from __future__ import annotations
 
+import copy
+import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -191,14 +194,118 @@ def _disconnect_codex() -> str:
 
 
 # ---------------------------------------------------------------------------
+# SessionStart hook (opt-in via ``connect --hooks``)
+#
+# Claude Code (~/.claude/settings.json) and Codex (~/.codex/hooks.json) share
+# the same ``{"hooks": {"SessionStart": [{"hooks": [handler]}]}}`` shape, and
+# both add the command's stdout to the session as context. We own exactly the
+# handlers whose command carries HOOK_MARKER; everything else is left as is.
+# ---------------------------------------------------------------------------
+
+# ponytail: the marker is a POSIX shell comment; Windows hosts need commandWindows.
+HOOK_MARKER = "# theatrum:session-start"
+
+_CODEX_HOOKS = Path.home() / ".codex" / "hooks.json"
+
+
+def _claude_hooks_path() -> Path:
+    return _claude_settings_path() or Path.home() / ".claude" / "settings.json"
+
+
+def _hook_handler() -> dict:
+    # No query → ``context`` prints the session brief for the cwd's project.
+    cmd = f"{shlex.quote(_theatrum_command())} context --budget 1000 {HOOK_MARKER}"
+    return {"type": "command", "command": cmd, "timeout": 10}
+
+
+def _load_hooks_file(p: Path) -> dict:
+    if not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8") or "{}")
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{p} is not valid JSON ({exc}); nothing changed") from exc
+    hooks = data.get("hooks", {}) if isinstance(data, dict) else None
+    if not isinstance(hooks, dict) or not isinstance(hooks.get("SessionStart", []), list):
+        raise ValueError(f"{p}: unexpected hooks layout; nothing changed")
+    return data
+
+
+def _strip_session_hook(data: dict) -> dict:
+    """Copy of ``data`` without our handlers; drops groups/keys that end up empty."""
+    data = copy.deepcopy(data)
+    hooks = data.get("hooks", {})
+    groups, removed = [], False
+    for g in hooks.get("SessionStart", []):
+        handlers = g.get("hooks") if isinstance(g, dict) else None
+        if isinstance(handlers, list):
+            kept = [h for h in handlers if not (isinstance(h, dict) and HOOK_MARKER in str(h.get("command", "")))]
+            if len(kept) < len(handlers):
+                removed = True
+                if not kept:
+                    continue
+                g["hooks"] = kept
+        groups.append(g)
+    if removed:
+        if groups:
+            hooks["SessionStart"] = groups
+        else:
+            del hooks["SessionStart"]
+            if not hooks:
+                del data["hooks"]
+    return data
+
+
+def _write_hooks_file(p: Path, data: dict) -> Path | None:
+    backup = _backup(p)
+    core.atomic_write_text(p, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    return backup
+
+
+def install_session_hook(p: Path) -> str:
+    """Idempotent: replaces any earlier theatrum handler, keeps every other key."""
+    data = _load_hooks_file(p)
+    new = _strip_session_hook(data)
+    new.setdefault("hooks", {}).setdefault("SessionStart", []).append({"hooks": [_hook_handler()]})
+    if new == data:
+        return f"session hook: already installed in {p}"
+    backup = _write_hooks_file(p, new)
+    return f"session hook: installed in {p}" + (f"\nbackup: {backup}" if backup else "")
+
+
+def remove_session_hook(p: Path) -> str:
+    data = _load_hooks_file(p)
+    new = _strip_session_hook(data)
+    if new == data:
+        return f"session hook: none in {p}"
+    backup = _write_hooks_file(p, new)
+    return f"session hook: removed from {p}" + (f"\nbackup: {backup}" if backup else "")
+
+
+def has_session_hook(p: Path) -> bool:
+    try:
+        data = _load_hooks_file(p)
+    except ValueError:
+        return False
+    return _strip_session_hook(data) != data
+
+
+# ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
 
-def connect_host(host: str) -> str:
+def connect_host(host: str, hooks: bool = False) -> str:
     if host == "claude":
-        return _connect_claude()
+        msg = _connect_claude()
+        if hooks:
+            msg += "\n" + install_session_hook(_claude_hooks_path())
+        return msg
     if host == "codex":
-        return _connect_codex()
+        msg = _connect_codex()
+        if hooks:
+            msg += "\n" + install_session_hook(_CODEX_HOOKS)
+            msg += "\nCodex skips new hooks until trusted: run /hooks in Codex once to review it."
+        return msg
     raise ValueError(f"unknown host: {host}")
 
 
@@ -216,12 +323,17 @@ def host_status() -> dict[str, bool | None]:
         except (OSError, subprocess.TimeoutExpired):
             claude = None
     codex = _CODEX_CONFIG.exists() and "# theatrum: begin" in _CODEX_CONFIG.read_text(encoding="utf-8")
-    return {"claude_connected": claude, "codex_connected": codex}
+    return {
+        "claude_connected": claude,
+        "codex_connected": codex,
+        "claude_session_hook": has_session_hook(_claude_hooks_path()),
+        "codex_session_hook": has_session_hook(_CODEX_HOOKS),
+    }
 
 
 def disconnect_host(host: str) -> str:
     if host == "claude":
-        return _disconnect_claude()
+        return _disconnect_claude() + "\n" + remove_session_hook(_claude_hooks_path())
     if host == "codex":
-        return _disconnect_codex()
+        return _disconnect_codex() + "\n" + remove_session_hook(_CODEX_HOOKS)
     raise ValueError(f"unknown host: {host}")
