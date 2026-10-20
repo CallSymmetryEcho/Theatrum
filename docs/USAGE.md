@@ -27,14 +27,14 @@ theatrum connect codex
 - `theatrum init` — create `~/.theatrum/vault` (idempotent).
 - `theatrum remember <content> --type <t> --scope <global|project> [--project ID] [--tags a,b] [--source user_requested|agent_inferred|imported] [--derived-from ID,...] [--confidence low|medium|high] [--title HINT]` — save a memory. `agent_inferred` and `imported` land in `inbox/` as proposed.
 - `theatrum recall <query> [--scope ...] [--project ID] [--limit N]` — ranked search.
-- `theatrum context <query> [--budget N] [--deep] [--project ID]` — MAP.md header + top memories packed under a token budget (chars/4).
+- `theatrum context [<query>] [--budget N] [--deep] [--project ID]` — MAP.md header + top memories packed under a token budget (chars/4). Without a query: the session-start brief (this project's + global memories, no MAP.md) that `--hooks` injects.
 - `theatrum review` — list proposed (inbox) memories awaiting curation.
 - `theatrum approve <id> [<id> ...]` — promote proposed memories to active.
 - `theatrum forget <id> [<id> ...]` — delete permanently. Git is the recovery path.
 - `theatrum import <claude|codex|markdown> <path> [--scope ...] [--project ID] [--type ...] [--yes]` — read-only import into `inbox/`. Dry-run by default; `--yes` writes. Content-hash dedupe, secret filtering, per-file provenance.
 - `theatrum serve` — run the MCP stdio server (hosts spawn this).
-- `theatrum connect <claude|codex>` — wire the MCP server into a host. Backs up the host config first.
-- `theatrum disconnect <claude|codex>` — fully reverse `connect`. Backs up first.
+- `theatrum connect <claude|codex> [--hooks]` — wire the MCP server into a host. Backs up the host config first. `--hooks` also adds a SessionStart hook (`~/.claude/settings.json` / `~/.codex/hooks.json`) that runs `theatrum context` in the session's project, so memory arrives without the agent asking. Codex needs a one-time `/hooks` trust.
+- `theatrum disconnect <claude|codex>` — fully reverse `connect`, hook included. Backs up first.
 - `theatrum doctor` — health report (vault/index/wiring). Exits non-zero if the vault is missing or the index is broken.
 
 ## MCP tools

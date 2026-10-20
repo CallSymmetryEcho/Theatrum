@@ -91,7 +91,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
 
 def cmd_connect(args: argparse.Namespace) -> int:
-    result = connect_host(args.host)
+    result = connect_host(args.host, hooks=args.hooks)
     _print(result)
     return 0
 
@@ -219,7 +219,7 @@ def build_parser() -> argparse.ArgumentParser:
     rc.set_defaults(func=cmd_recall)
 
     c = sub.add_parser("context", help="MAP.md header + top memories under a budget")
-    c.add_argument("query")
+    c.add_argument("query", nargs="?", default="", help="omit for the session-start brief (hooks)")
     c.add_argument("--budget", type=int, default=2000)
     c.add_argument("--deep", action="store_true")
     c.add_argument("--project", help="project id (default: auto-detected)")
@@ -229,9 +229,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     cn = sub.add_parser("connect", help="wire the MCP server into a host")
     cn.add_argument("host", choices=["claude", "codex"])
+    cn.add_argument("--hooks", action="store_true", help="also add a SessionStart hook that injects project memory")
     cn.set_defaults(func=cmd_connect)
 
-    dc = sub.add_parser("disconnect", help="unwire the MCP server from a host")
+    dc = sub.add_parser("disconnect", help="unwire the MCP server and SessionStart hook from a host")
     dc.add_argument("host", choices=["claude", "codex"])
     dc.set_defaults(func=cmd_disconnect)
 

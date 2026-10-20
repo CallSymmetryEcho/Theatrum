@@ -302,16 +302,23 @@ def build_context(
 
     When ``project`` is None, only global-scope memories are returned (same
     contract as ``recall``).
+
+    Blank ``query`` is the session-start brief (SessionStart hooks): no MAP.md
+    header, since it lists other projects' memory titles, and ``top_memories``
+    instead of a search.
     """
-    header = _map_header_snippet()
+    limit = 1000 if deep else 20
+    if query.strip():
+        header = _map_header_snippet()
+        mems = [h.memory for h in recall(query, project=project, limit=limit)]
+    else:
+        header = SESSION_HEADER.format(project=project or "none (global only)")
+        mems = top_memories(project=project, limit=limit)
     parts: list[str] = [header]
     used_tokens = estimate_tokens(header)
 
-    limit = 1000 if deep else 20
-    hits = recall(query, project=project, limit=limit)
-
-    for h in hits:
-        section = _pack_memory(h.memory)
+    for m in mems:
+        section = _pack_memory(m)
         cost = estimate_tokens(section)
         if used_tokens + cost > budget:
             # Budget cap applies in both regular and deep mode.
@@ -320,6 +327,33 @@ def build_context(
         used_tokens += cost
 
     return "\n\n".join(parts).rstrip() + "\n"
+
+
+SESSION_HEADER = (
+    "# Theatrum memory — project `{project}`\n\n"
+    "Loaded at session start: this project's and global memories only. "
+    "Use memory_recall / memory_context for more; save durable lessons with memory_remember."
+)
+
+
+def top_memories(*, project: str | None, limit: int = 20) -> list[core.Memory]:
+    """
+    Query-free pick: active memories visible from ``project`` (its own +
+    global; global only when None — the same hard filter as ``recall``).
+    Project memories first, then by feedback, confidence, recency.
+    """
+    visible = [
+        m for m in core.iter_all_memories()
+        if m.status == "active" and (
+            m.scope == "global"
+            or (project is not None and m.scope == "project" and m.project == project)
+        )
+    ]
+    visible.sort(
+        key=lambda m: (m.scope == "project", m.used - m.dead_end, _confidence_float(m.confidence), m.created),
+        reverse=True,
+    )
+    return visible[: max(0, int(limit))]
 
 
 def _map_header_snippet() -> str:
