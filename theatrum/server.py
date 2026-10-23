@@ -71,10 +71,12 @@ def memory_recall(
     limit: int = 10,
 ) -> list[dict[str, Any]]:
     """Ranked search. Project isolation is a hard filter, not a boost.
-    When ``project`` is None, only global-scope memories are returned.
+    When ``project`` is None, only global-scope memories are returned; if
+    project-scoped memories also matched, a final ``{"note", "hidden_in_projects"}``
+    item says which projects to query next.
     """
-    hits = _index.recall(query, scope=scope, project=project, limit=limit)
-    return [
+    hits, hidden = _index.search(query, scope=scope, project=project, limit=limit)
+    results = [
         {
             "id": h.memory.id,
             "type": h.memory.type,
@@ -86,6 +88,9 @@ def memory_recall(
         }
         for h in hits
     ]
+    if hidden:
+        results.append({"note": _index.hidden_hint(hidden), "hidden_in_projects": hidden})
+    return results
 
 
 @mcp.tool()
