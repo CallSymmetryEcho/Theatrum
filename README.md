@@ -1,4 +1,9 @@
 <p align="center">
+  <a href="#english"><img alt="English" src="https://img.shields.io/badge/English-161926?style=for-the-badge"></a>
+  <a href="#中文"><img alt="简体中文" src="https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-d9982f?style=for-the-badge"></a>
+</p>
+
+<p align="center">
   <img src="assets/logo.svg" width="180" alt="Theatrum logo — a memory palace with a glowing memory inside">
 </p>
 
@@ -20,7 +25,6 @@
 </p>
 
 <p align="center">
-  <a href="#english"><b>English</b></a> · <a href="#中文"><b>中文</b></a> ·
   <a href="docs/USAGE.md">Usage</a> ·
   <a href="docs/V1_MASTER_PLAN.md">Master plan</a> ·
   <a href="https://github.com/CallSymmetryEcho/trace-canvas">Sister project: Trace Canvas</a>
