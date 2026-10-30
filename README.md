@@ -1,13 +1,34 @@
 <p align="center">
+  <a href="#english"><img alt="English" src="https://img.shields.io/badge/English-161926?style=for-the-badge"></a>
+  <a href="#中文"><img alt="简体中文" src="https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-d9982f?style=for-the-badge"></a>
+</p>
+
+<p align="center">
   <img src="assets/logo.svg" width="180" alt="Theatrum logo — a memory palace with a glowing memory inside">
 </p>
 
-# Theatrum
+<h1 align="center">Theatrum</h1>
 
-> **One memory palace. Every agent.**
-> **一座记忆宫殿，每个 agent 共用。**
+<p align="center">
+  <b>One memory palace. Every agent.</b><br>
+  一座记忆宫殿，每个 agent 共用。
+</p>
 
-**[English](#english)** | **[中文](#中文)**
+<p align="center">
+  <a href="pyproject.toml"><img alt="Version" src="https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2FCallSymmetryEcho%2FTheatrum%2Fmain%2Fpyproject.toml&query=%24.project.version&label=version&color=d9982f"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-2e7d32"></a>
+  <a href="#quick-start"><img alt="Python 3.10 or newer" src="https://img.shields.io/badge/python-%E2%89%A5%203.10-3776AB?logo=python&logoColor=white"></a>
+  <a href="docs/USAGE.md"><img alt="MCP server" src="https://img.shields.io/badge/MCP-server-161926"></a>
+  <a href="#quick-start"><img alt="Works with Claude Code and Codex" src="https://img.shields.io/badge/works%20with-Claude%20Code%20%C2%B7%20Codex-d9982f"></a>
+  <a href="#why-nothing-else-fits"><img alt="No model calls" src="https://img.shields.io/badge/LLM%20calls-none-161926"></a>
+  <a href="https://github.com/CallSymmetryEcho/Theatrum/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/CallSymmetryEcho/Theatrum?color=5b6070"></a>
+</p>
+
+<p align="center">
+  <a href="docs/USAGE.md">Usage</a> ·
+  <a href="docs/V1_MASTER_PLAN.md">Master plan</a> ·
+  <a href="https://github.com/CallSymmetryEcho/trace-canvas">Sister project: Trace Canvas</a>
+</p>
 
 ---
 
