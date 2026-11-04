@@ -134,9 +134,8 @@ pipx install "git+https://github.com/CallSymmetryEcho/Theatrum"   # or: uv tool 
 # or from source: git clone <this repo> && cd Theatrum && uv venv && uv pip install -e .
 
 theatrum init                  # vault at ~/.theatrum/vault
-theatrum connect claude        # wires the MCP server into Claude Code
-theatrum connect codex         # ...and Codex (config backed up first, always)
-# add --hooks to either: inject this project's memories at every session start
+theatrum connect claude --hooks   # MCP server + session-start memory for Claude Code
+theatrum connect codex --hooks    # ...and Codex (config backed up first, always)
 
 # save your first experience
 theatrum remember "## Problem
@@ -162,7 +161,9 @@ theatrum sync run              # commit + pull + push + rebuild local index
 theatrum sync status           # offline diagnostic; never fetches
 ```
 
-Every host-config edit is backed up first, and `disconnect` fully reverses `connect`.
+`--hooks` makes memory arrive without the agent asking: every new session starts with this project's and global memories already in context (`theatrum context --budget 1000`, run in the session's folder; other projects' memories never appear). Without it, the agent only sees memory when it calls `memory_recall` / `memory_context`. Codex asks you to trust a new hook once: run `/hooks` inside Codex. `theatrum doctor` shows whether each hook is installed.
+
+Every host-config edit is backed up first, and `disconnect` fully reverses `connect`, hooks included.
 
 ### Design rules
 
@@ -283,9 +284,8 @@ pipx install "git+https://github.com/CallSymmetryEcho/Theatrum"   # 或：uv too
 # 或源码安装：git clone <this repo> && cd Theatrum && uv venv && uv pip install -e .
 
 theatrum init                  # vault 建在 ~/.theatrum/vault
-theatrum connect claude        # 把 MCP 服务器接入 Claude Code
-theatrum connect codex         # ……以及 Codex（改配置前必先备份）
-# 任一命令加 --hooks：每次会话开始自动注入本项目记忆
+theatrum connect claude --hooks   # 接入 Claude Code：MCP 服务器 + 会话开始自动带上记忆
+theatrum connect codex --hooks    # ……以及 Codex（改配置前必先备份）
 
 # 存下第一条经验
 theatrum remember "## Problem
@@ -311,7 +311,9 @@ theatrum sync run              # 提交 + 拉取 + 推送 + 重建本地索引
 theatrum sync status           # 仅本地诊断，不访问网络
 ```
 
-每次修改宿主配置前都会先备份，`disconnect` 可完全还原 `connect`。
+`--hooks` 让记忆不用 agent 开口就送到：每次新会话开始时，本项目和全局的记忆已经在上下文里（在会话所在目录运行 `theatrum context --budget 1000`，其他项目的记忆不会出现）。不加它，agent 只有主动调用 `memory_recall` / `memory_context` 时才看得到记忆。Codex 第一次要信任新 hook：在 Codex 里运行一次 `/hooks`。`theatrum doctor` 会显示每个 hook 是否已装好。
+
+每次修改宿主配置前都会先备份，`disconnect` 可完全还原 `connect`，hook 也一起撤掉。
 
 ### 设计准则
 

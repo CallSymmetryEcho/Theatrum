@@ -127,6 +127,48 @@ def test_same_memory_edit_stops_on_conflict(tmp_path, monkeypatch):
     assert status["conflicts"]
 
 
+def test_counter_only_conflict_sums_both_sides(tmp_path, monkeypatch):
+    from theatrum import core, sync
+
+    remote = tmp_path / "vault.git"
+    _bare_remote(remote)
+
+    home_a = tmp_path / "a"
+    _select_home(monkeypatch, home_a)
+    core.init_vault()
+    memory = core.remember(
+        content="# shared lesson\nbase content.",
+        type="lesson",
+        scope="global",
+        source="user_requested",
+    )
+    core.apply_feedback([memory.id], "useful")  # base used=1
+    sync.initialize(str(remote))
+    _configure_identity(core.vault_dir())
+    sync.run_sync(message="base")
+
+    home_b = tmp_path / "b"
+    _select_home(monkeypatch, home_b)
+    core.init_vault()
+    sync.initialize(str(remote))
+    _configure_identity(core.vault_dir())
+    sync.run_sync(message="join host b")
+    for _ in range(3):
+        core.apply_feedback([memory.id], "useful")  # b: +3
+    core.apply_feedback([memory.id], "dead_end")  # b: +1
+
+    _select_home(monkeypatch, home_a)
+    core.apply_feedback([memory.id], "useful")  # a: +1
+    sync.run_sync(message="host a feedback")
+
+    _select_home(monkeypatch, home_b)
+    result = sync.run_sync(message="host b feedback")
+    assert result.pushed is True
+    merged = core.find_memory(memory.id)
+    assert (merged.used, merged.dead_end) == (5, 1)  # 1 + 1 + 3, 0 + 1
+    assert sync.sync_status()["clean"] is True
+
+
 def test_secret_scanner_blocks_first_push(tmp_path, monkeypatch):
     from theatrum import core, sync
 

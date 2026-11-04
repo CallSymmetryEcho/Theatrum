@@ -349,6 +349,44 @@ def _histories_related(remote_ref: str) -> bool:
     return proc.returncode == 0
 
 
+_COUNTERS = ("used", "dead_end")
+
+
+def _stage_text(stage: int, path: str) -> str | None:
+    proc = _git(["show", f":{stage}:{path}"], check=False, timeout=10)
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _sum_counter_conflict(path: str) -> bool:
+    """
+    Auto-resolve a conflict where both sides changed only ``used``/``dead_end``.
+    Counters accumulate per machine, so the merge is base + both deltas.
+    Anything else (body, other fields, no common base) stays a conflict.
+    """
+    texts = [_stage_text(n, path) for n in (1, 2, 3)]
+    if None in texts:
+        return False
+    (base, base_body), (ours, ours_body), (theirs, theirs_body) = (
+        core.parse_frontmatter(t) for t in texts
+    )
+
+    def rest(meta: dict) -> dict:
+        return {k: v for k, v in meta.items() if k not in _COUNTERS}
+
+    if not base or not (base_body == ours_body == theirs_body) or not (rest(base) == rest(ours) == rest(theirs)):
+        return False
+    merged = dict(ours)
+    try:
+        for key in _COUNTERS:
+            b, o, t = (int(m.get(key, 0) or 0) for m in (base, ours, theirs))
+            merged[key] = o + t - b
+    except (TypeError, ValueError):
+        return False
+    (core.vault_dir() / path).write_text(core.dump_frontmatter(merged, ours_body), encoding="utf-8")
+    _git(["add", "--", path], timeout=10)
+    return True
+
+
 def _integrate(remote: str, branch: str) -> bool:
     _git(["fetch", remote], timeout=60)
     if not _remote_branch_exists(remote, branch):
@@ -364,9 +402,18 @@ def _integrate(remote: str, branch: str) -> bool:
             check=False,
             timeout=60,
         )
-    if proc.returncode != 0:
+    while proc.returncode != 0:
         conflicts = _conflicted_paths()
-        if conflicts or _operation_in_progress():
+        operation = _operation_in_progress()
+        resolved = [p for p in conflicts if _sum_counter_conflict(p)]
+        if conflicts and len(resolved) == len(conflicts) and operation:
+            # Every conflict was feedback counters only; carry on.
+            if operation == "rebase":
+                proc = _git(["-c", "core.editor=true", "rebase", "--continue"], check=False, timeout=60)
+            else:
+                proc = _git(["commit", "--no-edit"], check=False, timeout=30)
+            continue
+        if conflicts or operation:
             joined = ", ".join(conflicts) if conflicts else "unknown paths"
             raise SyncConflictError(
                 f"sync stopped on Git conflicts: {joined}; resolve them in "
